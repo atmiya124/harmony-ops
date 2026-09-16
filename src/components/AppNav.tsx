@@ -50,7 +50,7 @@ export default function AppNav() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-between px-5 pb-4">
       <div className="overflow-hidden rounded-full border border-white/[0.14] backdrop-blur-xl">
-        <div className="flex items-center gap-3.5 bg-white/[0.04] px-3 py-3">
+        <div className="flex items-center gap-1 bg-white/[0.04] p-1.5">
           {tabs.map(({ key, label, href, icon: Icon }) => {
             const isActive = key === activeTab;
             return (
@@ -58,11 +58,12 @@ export default function AppNav() {
                 key={key}
                 href={href}
                 aria-label={label}
-                className={`flex size-13 items-center justify-center rounded-full transition ${
-                  isActive ? 'bg-white text-[#0a0a0a]' : 'bg-white/[0.08] text-white/70 hover:bg-white/[0.12]'
+                className={`flex w-20 flex-col items-center justify-center gap-0.5 rounded-full py-2 transition ${
+                  isActive ? 'bg-white text-[#0a0a0a]' : 'text-white/55 hover:text-white/80'
                 }`}
               >
-                <Icon size={22} />
+                <Icon size={19} />
+                <span className={`text-[10px] font-semibold leading-none ${isActive ? 'text-[#0a0a0a]' : 'text-white/50'}`}>{label}</span>
               </Link>
             );
           })}

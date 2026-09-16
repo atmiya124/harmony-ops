@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, Loader2, Sparkles } from 'lucide-react';
 import { AiParsedBooking, AiParseError, parseBookingEmail } from '@/lib/aiParse';
 
 export default function PasteEmailCard({ onParsed }: { onParsed: (parsed: AiParsedBooking) => void }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
