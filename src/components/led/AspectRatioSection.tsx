@@ -66,6 +66,7 @@ export default function AspectRatioSection({
         <input
           value={customW}
           onChange={(e) => onChangeCustomW(e.target.value)}
+          onFocus={(e) => e.target.select()}
           inputMode="decimal"
           className="min-w-0 flex-1 rounded-md border border-[var(--flat-border-strong)] bg-[var(--flat-surface-input)] px-2.5 py-2 text-center text-sm text-white outline-none focus:border-[rgba(0,212,255,0.5)]"
         />
@@ -73,6 +74,7 @@ export default function AspectRatioSection({
         <input
           value={customH}
           onChange={(e) => onChangeCustomH(e.target.value)}
+          onFocus={(e) => e.target.select()}
           inputMode="decimal"
           className="min-w-0 flex-1 rounded-md border border-[var(--flat-border-strong)] bg-[var(--flat-surface-input)] px-2.5 py-2 text-center text-sm text-white outline-none focus:border-[rgba(0,212,255,0.5)]"
         />

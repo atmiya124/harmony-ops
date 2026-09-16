@@ -115,6 +115,7 @@ function RateField({
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onFocus={(e) => e.target.select()}
           inputMode="decimal"
           className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none"
         />

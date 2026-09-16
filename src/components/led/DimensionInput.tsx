@@ -14,6 +14,7 @@ export default function DimensionInput({ label, value, onChangeText }: Dimension
       <input
         value={value}
         onChange={(e) => onChangeText(e.target.value)}
+        onFocus={(e) => e.target.select()}
         inputMode="decimal"
         className="w-full rounded-xl border border-[var(--flat-border)] bg-[var(--flat-surface-input)] px-4 py-3 text-lg font-semibold text-white outline-none transition focus:border-[var(--neon-cyan)]"
       />

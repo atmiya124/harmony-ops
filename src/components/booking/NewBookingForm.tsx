@@ -184,6 +184,7 @@ export default function NewBookingForm({ initial, isEdit, onCancel, onSave, onAi
                     <input
                       value={String(item.qty)}
                       onChange={(e) => updateEquipment(i, { qty: parseInt(e.target.value) || 1 })}
+                      onFocus={(e) => e.target.select()}
                       className="w-12 rounded-lg border border-[var(--flat-border)] bg-[var(--flat-surface-input)] py-1.5 text-center text-xs text-white outline-none"
                     />
                   </div>
@@ -198,6 +199,7 @@ export default function NewBookingForm({ initial, isEdit, onCancel, onSave, onAi
                 <input
                   value={ledWidth}
                   onChange={(e) => setLedWidth(e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   placeholder="Width"
                   className="min-w-0 flex-1 rounded-lg border border-[var(--flat-border)] bg-[var(--flat-surface-input)] px-2.5 py-2 text-center text-sm text-white outline-none"
                 />
@@ -205,6 +207,7 @@ export default function NewBookingForm({ initial, isEdit, onCancel, onSave, onAi
                 <input
                   value={ledHeight}
                   onChange={(e) => setLedHeight(e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   placeholder="Height"
                   className="min-w-0 flex-1 rounded-lg border border-[var(--flat-border)] bg-[var(--flat-surface-input)] px-2.5 py-2 text-center text-sm text-white outline-none"
                 />

@@ -220,6 +220,7 @@ function EquipmentGroup({
                 <input
                   value={String(item.qty)}
                   onChange={(e) => update(i, { qty: parseInt(e.target.value) || 1 })}
+                  onFocus={(e) => e.target.select()}
                   className="w-10 rounded border border-[var(--flat-border)] bg-[var(--flat-surface-input)] py-1 text-center text-xs text-white outline-none"
                 />
               </div>
