@@ -1,7 +1,7 @@
-import { StageResult, PRICE_PER_PANEL, calculateStagePrice } from '@/lib/stageCalculator';
+import { StageResult, calculateStagePrice } from '@/lib/stageCalculator';
 
-export default function StagePricingSection({ results }: { results: StageResult }) {
-  const total = calculateStagePrice(results.totalPanels);
+export default function StagePricingSection({ results, ratePerPanel }: { results: StageResult; ratePerPanel: number }) {
+  const total = calculateStagePrice(results.totalPanels, ratePerPanel);
 
   return (
     <div>
@@ -14,7 +14,7 @@ export default function StagePricingSection({ results }: { results: StageResult 
 
       <div className="flex items-center justify-between border-b border-[var(--flat-border)] py-2">
         <span className="text-xs text-[var(--flat-text-dim)]">Rate</span>
-        <span className="text-sm font-medium text-white">${PRICE_PER_PANEL} / panel</span>
+        <span className="text-sm font-medium text-white">${ratePerPanel} / panel</span>
       </div>
       <div className="flex items-center justify-between border-b border-[var(--flat-border)] py-2">
         <span className="text-xs text-[var(--flat-text-dim)]">Total panels</span>

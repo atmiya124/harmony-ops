@@ -8,9 +8,15 @@ import ResultCardGrid from '@/components/shared/ResultCardGrid';
 import StagePreviewGrid from '@/components/stage/StagePreviewGrid';
 import StagePanelInfoSection from '@/components/stage/StagePanelInfoSection';
 import StagePricingSection from '@/components/stage/StagePricingSection';
+import PanelIcon from '@/components/icons/PanelIcon';
+import LegIcon from '@/components/icons/LegIcon';
+import Support8Icon from '@/components/icons/Support8Icon';
+import SupportIcon from '@/components/icons/SupportIcon';
 import { calculateStage, calculateStagePrice, ftToUnit, unitToFt, fmt, STAGE_QUICK_SIZES, Orientation, Unit } from '@/lib/stageCalculator';
+import { usePricingSettings } from '@/hooks/usePricingSettings';
 
 export default function StageCalculatorPage() {
+  const { rates } = usePricingSettings();
   const [unit, setUnit] = useState<Unit>('ft');
   const [orientation, setOrientation] = useState<Orientation>('horizontal');
   const [lengthInput, setLengthInput] = useState('8');
@@ -118,11 +124,11 @@ export default function StageCalculatorPage() {
       {isValid && result ? (
         <ResultCardGrid
           cards={[
-            { label: 'Total Panels', value: result.totalPanels.toString(), color: 'var(--neon-cyan)', icon: '▦', large: true },
-            { label: 'Legs', value: result.legs.toString(), color: 'var(--neon-green)', icon: '⊥', large: true },
-            { label: "8' Support", value: result.support8ft.toString(), color: 'var(--neon-purple)', icon: '━', large: true },
-            { label: "4' Support", value: result.support4ft.toString(), color: 'var(--neon-mint)', icon: '┃', large: true },
-            { label: 'Stage Area', value: `${result.areaSqFt.toFixed(0)} sq ft`, color: 'var(--neon-orange)', icon: '📐', large: true },
+            { label: 'Total Panels', value: result.totalPanels.toString(), color: 'var(--neon-cyan)', icon: <PanelIcon size={30} />, large: true },
+            { label: 'Legs', value: result.legs.toString(), color: 'var(--neon-green)', icon: <LegIcon size={30} />, large: true },
+            { label: "8' Support", value: result.support8ft.toString(), color: 'var(--neon-purple)', icon: <Support8Icon size={30} />, large: true },
+            { label: "4' Support", value: result.support4ft.toString(), color: 'var(--neon-mint)', icon: <SupportIcon size={30} />, large: true },
+            { label: 'Stage Area', value: `${result.areaSqFt.toFixed(0)} sq ft`, color: 'var(--neon-orange)', icon: '📐', large: true, wide: true },
           ]}
         />
       ) : (
@@ -136,10 +142,10 @@ export default function StageCalculatorPage() {
       {isValid && result ? (
         <Accordion
           title="Pricing"
-          subtitle={`$${calculateStagePrice(result.totalPanels).toLocaleString('en-US', { maximumFractionDigits: 0 })} estimated total`}
+          subtitle={`$${calculateStagePrice(result.totalPanels, rates.stagePricePerPanel).toLocaleString('en-US', { maximumFractionDigits: 0 })} estimated total`}
           defaultOpen
         >
-          <StagePricingSection results={result} />
+          <StagePricingSection results={result} ratePerPanel={rates.stagePricePerPanel} />
         </Accordion>
       ) : null}
     </div>

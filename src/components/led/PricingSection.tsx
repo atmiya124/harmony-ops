@@ -1,7 +1,7 @@
-import { LedWallResult, PRICE_PER_SQFT, calculateLedPrice } from '@/lib/ledCalculator';
+import { LedWallResult, calculateLedPrice } from '@/lib/ledCalculator';
 
-export default function PricingSection({ results }: { results: LedWallResult }) {
-  const total = calculateLedPrice(results.sqFt);
+export default function PricingSection({ results, ratePerSqFt }: { results: LedWallResult; ratePerSqFt: number }) {
+  const total = calculateLedPrice(results.sqFt, ratePerSqFt);
 
   return (
     <div>
@@ -14,7 +14,7 @@ export default function PricingSection({ results }: { results: LedWallResult }) 
 
       <div className="flex items-center justify-between border-b border-[var(--flat-border)] py-2">
         <span className="text-xs text-[var(--flat-text-dim)]">Rate</span>
-        <span className="text-sm font-medium text-white">${PRICE_PER_SQFT} / sq ft</span>
+        <span className="text-sm font-medium text-white">${ratePerSqFt} / sq ft</span>
       </div>
       <div className="flex items-center justify-between border-b border-[var(--flat-border)] py-2">
         <span className="text-xs text-[var(--flat-text-dim)]">Screen area</span>

@@ -10,9 +10,11 @@ import WallPreviewGrid from '@/components/led/WallPreviewGrid';
 import ResultCardGrid from '@/components/shared/ResultCardGrid';
 import CablesSection from '@/components/led/CablesSection';
 import PricingSection from '@/components/led/PricingSection';
-import { calculateLedWall, mmToUnit, unitToMm, fmt, AspectPreset, QUICK_SIZES, Unit } from '@/lib/ledCalculator';
+import { calculateLedWall, calculateLedPrice, mmToUnit, unitToMm, fmt, AspectPreset, QUICK_SIZES, Unit } from '@/lib/ledCalculator';
+import { usePricingSettings } from '@/hooks/usePricingSettings';
 
 export default function CalculatorPage() {
+  const { rates } = usePricingSettings();
   const [unit, setUnit] = useState<Unit>('ft');
   const [widthInput, setWidthInput] = useState('20');
   const [heightInput, setHeightInput] = useState('10');
@@ -235,10 +237,10 @@ export default function CalculatorPage() {
       {isValid && result ? (
         <Accordion
           title="Pricing"
-          subtitle={`$${(result.sqFt * 17).toLocaleString('en-US', { maximumFractionDigits: 0 })} estimated total`}
+          subtitle={`$${calculateLedPrice(result.sqFt, rates.ledPricePerSqft).toLocaleString('en-US', { maximumFractionDigits: 0 })} estimated total`}
           defaultOpen
         >
-          <PricingSection results={result} />
+          <PricingSection results={result} ratePerSqFt={rates.ledPricePerSqft} />
         </Accordion>
       ) : null}
     </div>

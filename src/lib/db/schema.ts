@@ -86,6 +86,16 @@ export const equipmentCatalog = sqliteTable('equipment_catalog', {
   keywords: text('keywords').notNull().default(''),
 });
 
+// New table, introduced by harmony-ops — does not conflict with anything
+// that already exists in this database. Singleton row (id 1) holding the
+// per-unit rates used by the LED and stage pricing sections.
+export const pricingSettings = sqliteTable('pricing_settings', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ledPricePerSqft: real('led_price_per_sqft').notNull().default(17),
+  stagePricePerPanel: real('stage_price_per_panel').notNull().default(85),
+  updatedAt: text('updated_at'),
+});
+
 export type BookingRow = typeof bookings.$inferSelect;
 export type NewBookingRow = typeof bookings.$inferInsert;
 export type BookingEquipmentRow = typeof bookingEquipment.$inferSelect;
@@ -94,3 +104,5 @@ export type BookingServiceRow = typeof bookingServices.$inferSelect;
 export type NewBookingServiceRow = typeof bookingServices.$inferInsert;
 export type EquipmentCatalogRow = typeof equipmentCatalog.$inferSelect;
 export type NewEquipmentCatalogRow = typeof equipmentCatalog.$inferInsert;
+export type PricingSettingsRow = typeof pricingSettings.$inferSelect;
+export type NewPricingSettingsRow = typeof pricingSettings.$inferInsert;

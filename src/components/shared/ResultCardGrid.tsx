@@ -1,5 +1,4 @@
 import { ReactNode } from 'react';
-import { colorAlpha } from '@/lib/colorAlpha';
 
 export interface ResultCard {
   label: string;
@@ -8,6 +7,7 @@ export interface ResultCard {
   color: string;
   icon: ReactNode;
   large?: boolean;
+  wide?: boolean;
 }
 
 export default function ResultCardGrid({ cards }: { cards: ResultCard[] }) {
@@ -16,13 +16,12 @@ export default function ResultCardGrid({ cards }: { cards: ResultCard[] }) {
       {cards.map((card) => (
         <div
           key={card.label}
-          className="rounded-xl border-t-2 border-x border-b border-x-transparent border-b-transparent bg-[var(--flat-surface)] p-4"
+          className={`rounded-xl border-t-2 border-x border-b border-x-transparent border-b-transparent bg-[var(--flat-surface)] p-4 ${
+            card.wide ? 'col-span-2' : ''
+          }`}
           style={{ borderTopColor: card.color }}
         >
-          <div
-            className="mb-2 flex size-8 items-center justify-center rounded-lg text-base leading-none"
-            style={{ backgroundColor: colorAlpha(card.color, 15), color: card.color }}
-          >
+          <div className="mb-2.5 flex h-8 items-center text-xl leading-none" style={{ color: card.color }}>
             {card.icon}
           </div>
           <p className="text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--flat-text-faint)]">{card.label}</p>

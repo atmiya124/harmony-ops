@@ -24,10 +24,11 @@ export const PANEL: PanelSpec = {
 };
 
 // Basic flat-rate pricing: $/sq ft of actual (panel-rounded) screen area.
-export const PRICE_PER_SQFT = 17;
+// Default used until the rate configured in Calculator Settings loads.
+export const DEFAULT_LED_RATE = 17;
 
-export function calculateLedPrice(sqFt: number): number {
-  return sqFt * PRICE_PER_SQFT;
+export function calculateLedPrice(sqFt: number, ratePerSqFt: number = DEFAULT_LED_RATE): number {
+  return sqFt * ratePerSqFt;
 }
 
 export type AspectPreset = {

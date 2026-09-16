@@ -6,10 +6,11 @@ export const PANEL_WIDTH_FT = 4; // short edge
 export const PANEL_LENGTH_FT = 8; // long edge
 
 // Basic flat-rate pricing: $/panel.
-export const PRICE_PER_PANEL = 85;
+// Default used until the rate configured in Calculator Settings loads.
+export const DEFAULT_STAGE_RATE = 85;
 
-export function calculateStagePrice(totalPanels: number): number {
-  return totalPanels * PRICE_PER_PANEL;
+export function calculateStagePrice(totalPanels: number, ratePerPanel: number = DEFAULT_STAGE_RATE): number {
+  return totalPanels * ratePerPanel;
 }
 
 const FT_TO_M = 0.3048;
