@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "LED Wall Calculator",
+    "slug": "led-wall-calculator",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "LED Wall & Stage Calculator",
+      "shortName": "Calculator",
+      "description": "Plan LED video walls and modular stage decks — panel counts, resolution, power, hardware and cabling, all in one calculator.",
+      "themeColor": "#02080f",
+      "backgroundColor": "#02080f"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-splash-screen",
+      "expo-status-bar"
+    ]
+  }
+}
