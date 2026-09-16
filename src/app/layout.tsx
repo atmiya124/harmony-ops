@@ -6,7 +6,7 @@ import AppNav from '@/components/AppNav';
 const roboto = Roboto({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-roboto' });
 
 export const metadata: Metadata = {
-  title: 'LED Wall & Stage Calculator',
+  title: 'Harmony Ops',
   description: 'Plan LED video walls and modular stage decks — panel counts, resolution, power, hardware, cabling, pricing, and event bookings, all in one place.',
 };
 
