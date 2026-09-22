@@ -28,6 +28,10 @@ const SCALAR_FIELDS = Object.keys(FIELD_LABELS);
 const FIELD_TYPES: Record<string, string> = {
   'schedule.eventDate': 'date',
   'schedule.pickupDate': 'date',
+  'schedule.setupTime': 'time',
+  'schedule.startTime': 'time',
+  'schedule.endTime': 'time',
+  'schedule.pickupTime': 'time',
 };
 
 function originalFieldValues(parsed: AiParsedBooking): Record<string, string> {
@@ -80,7 +84,7 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
   // so there was no way to fill it in even if the user knew the answer;
   // it just stayed blank on the saved booking. Only REQUIRED_FIELDS still
   // block saving (see canSave below).
-  const [groups] = useState<Record<AiConfidence, string[]>>(() => {
+  const [groups, setGroups] = useState<Record<AiConfidence, string[]>>(() => {
     const byTier: Record<AiConfidence, string[]> = { confirmed: [], assumed: [], missing: [] };
     for (const path of SCALAR_FIELDS) {
       const value = fields[path];
@@ -100,8 +104,13 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
   // required fields are filled in — intentionally not automatic (typing
   // used to reclassify the field into a different tier mid-keystroke and
   // steal focus; this replaces that with a deliberate click instead).
-  // Optional fields left blank in the card don't block this.
-  const [missingResolved, setMissingResolved] = useState(false);
+  // Optional fields left blank in the card don't block this. The fields
+  // move into the "Auto-filled" card (rather than just disappearing) so
+  // what was just typed is still visible for one more look before saving.
+  const resolveMissing = () => {
+    if (!canSave) return;
+    setGroups((prev) => ({ ...prev, confirmed: [...prev.confirmed, ...prev.missing], missing: [] }));
+  };
 
   const handleConfirm = () => {
     if (!canSave) return;
@@ -169,7 +178,6 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
       <div className="space-y-3">
         {(['missing', 'assumed', 'confirmed'] as AiConfidence[]).map((tier) => {
           if (groups[tier].length === 0) return null;
-          if (tier === 'missing' && missingResolved) return null;
           const style = TIER_STYLE[tier];
           return (
             <Tier
@@ -186,7 +194,7 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
                 tier === 'missing' ? (
                   <button
                     type="button"
-                    onClick={() => canSave && setMissingResolved(true)}
+                    onClick={resolveMissing}
                     disabled={!canSave}
                     aria-label="Mark missing fields as filled in"
                     className="flex size-7 shrink-0 items-center justify-center rounded-full transition disabled:opacity-30"
