@@ -92,6 +92,13 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
 
   const canSave = (REQUIRED_FIELDS as readonly string[]).every((path) => fields[path]?.trim());
 
+  // Explicit, user-initiated way to dismiss the "Missing" card once its
+  // fields are filled in — intentionally not automatic (typing used to
+  // reclassify the field into a different tier mid-keystroke and steal
+  // focus; this replaces that with a deliberate click instead).
+  const [missingResolved, setMissingResolved] = useState(false);
+  const missingFilled = groups.missing.length > 0 && groups.missing.every((path) => fields[path]?.trim());
+
   const handleConfirm = () => {
     if (!canSave) return;
     const base = blankBooking();
@@ -158,9 +165,28 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
       <div className="space-y-3">
         {(['missing', 'assumed', 'confirmed'] as AiConfidence[]).map((tier) => {
           if (groups[tier].length === 0) return null;
+          if (tier === 'missing' && missingResolved) return null;
           const style = TIER_STYLE[tier];
           return (
-            <Tier key={tier} style={style} subtitle={tier === 'missing' ? "The email didn't include these — fill them in to save." : tier === 'assumed' ? 'Assumed or ambiguous — please verify.' : undefined}>
+            <Tier
+              key={tier}
+              style={style}
+              subtitle={tier === 'missing' ? "The email didn't include these — fill them in to save." : tier === 'assumed' ? 'Assumed or ambiguous — please verify.' : undefined}
+              action={
+                tier === 'missing' ? (
+                  <button
+                    type="button"
+                    onClick={() => missingFilled && setMissingResolved(true)}
+                    disabled={!missingFilled}
+                    aria-label="Mark missing fields as filled in"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full transition disabled:opacity-30"
+                    style={{ backgroundColor: colorAlpha('var(--neon-green)', 10), color: 'var(--neon-green)' }}
+                  >
+                    <Check size={14} />
+                  </button>
+                ) : undefined
+              }
+            >
               {groups[tier].map((path) => (
                 <FieldRow
                   key={path}
@@ -209,15 +235,28 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
   );
 }
 
-function Tier({ style, subtitle, children }: { style: (typeof TIER_STYLE)[AiConfidence]; subtitle?: string; children: React.ReactNode }) {
+function Tier({
+  style,
+  subtitle,
+  action,
+  children,
+}: {
+  style: (typeof TIER_STYLE)[AiConfidence];
+  subtitle?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const { Icon, color, bg, border, title } = style;
   return (
     <div className="rounded-xl border p-3.5" style={{ borderColor: border, backgroundColor: bg }}>
-      <div className="flex items-center gap-2">
-        <Icon size={15} style={{ color }} />
-        <p className="text-[11px] font-bold uppercase tracking-[0.04em]" style={{ color }}>
-          {title}
-        </p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Icon size={15} style={{ color }} />
+          <p className="text-[11px] font-bold uppercase tracking-[0.04em]" style={{ color }}>
+            {title}
+          </p>
+        </div>
+        {action}
       </div>
       {subtitle ? <p className="mt-1 text-[11px] text-[var(--flat-text-faint)]">{subtitle}</p> : null}
       <div className="mt-2.5 space-y-2">{children}</div>
