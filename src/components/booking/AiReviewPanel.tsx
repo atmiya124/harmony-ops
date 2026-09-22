@@ -49,7 +49,7 @@ function originalFieldValues(parsed: AiParsedBooking): Record<string, string> {
 const TIER_STYLE = {
   confirmed: { color: 'var(--neon-green)', bg: 'rgba(0,255,136,0.06)', border: 'rgba(0,255,136,0.25)', Icon: CheckCircle2, title: 'Auto-filled' },
   assumed: { color: 'var(--neon-orange)', bg: 'rgba(251,146,60,0.06)', border: 'rgba(251,146,60,0.3)', Icon: HelpCircle, title: 'Needs confirmation' },
-  missing: { color: 'var(--neon-pink)', bg: 'rgba(244,114,182,0.06)', border: 'rgba(244,114,182,0.3)', Icon: AlertCircle, title: 'Missing — required' },
+  missing: { color: 'var(--neon-pink)', bg: 'rgba(244,114,182,0.06)', border: 'rgba(244,114,182,0.3)', Icon: AlertCircle, title: 'Missing' },
 } as const;
 
 interface Props {
@@ -73,15 +73,19 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
   // Grouped once, from the draft's initial values — not recalculated as
   // the user types, otherwise a "missing" field would jump to a different
   // tier (and lose focus) after the very first keystroke.
+  //
+  // Every empty field lands in "missing", not just the required ones —
+  // previously an empty-but-optional field (setup/start/end time, pickup
+  // date/time, event type) was silently dropped from the review entirely,
+  // so there was no way to fill it in even if the user knew the answer;
+  // it just stayed blank on the saved booking. Only REQUIRED_FIELDS still
+  // block saving (see canSave below).
   const [groups] = useState<Record<AiConfidence, string[]>>(() => {
     const byTier: Record<AiConfidence, string[]> = { confirmed: [], assumed: [], missing: [] };
     for (const path of SCALAR_FIELDS) {
       const value = fields[path];
-      const isRequired = (REQUIRED_FIELDS as readonly string[]).includes(path);
-      if (isRequired && !value.trim()) {
+      if (!value.trim()) {
         byTier.missing.push(path);
-      } else if (!value.trim()) {
-        continue;
       } else {
         const confidence = parsed.confidence[path] ?? 'confirmed';
         byTier[confidence === 'missing' ? 'confirmed' : confidence].push(path);
@@ -93,11 +97,11 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
   const canSave = (REQUIRED_FIELDS as readonly string[]).every((path) => fields[path]?.trim());
 
   // Explicit, user-initiated way to dismiss the "Missing" card once its
-  // fields are filled in — intentionally not automatic (typing used to
-  // reclassify the field into a different tier mid-keystroke and steal
-  // focus; this replaces that with a deliberate click instead).
+  // required fields are filled in — intentionally not automatic (typing
+  // used to reclassify the field into a different tier mid-keystroke and
+  // steal focus; this replaces that with a deliberate click instead).
+  // Optional fields left blank in the card don't block this.
   const [missingResolved, setMissingResolved] = useState(false);
-  const missingFilled = groups.missing.length > 0 && groups.missing.every((path) => fields[path]?.trim());
 
   const handleConfirm = () => {
     if (!canSave) return;
@@ -171,13 +175,19 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
             <Tier
               key={tier}
               style={style}
-              subtitle={tier === 'missing' ? "The email didn't include these — fill them in to save." : tier === 'assumed' ? 'Assumed or ambiguous — please verify.' : undefined}
+              subtitle={
+                tier === 'missing'
+                  ? "The email didn't include these. Fields marked Required must be filled in to save — the rest are optional."
+                  : tier === 'assumed'
+                    ? 'Assumed or ambiguous — please verify.'
+                    : undefined
+              }
               action={
                 tier === 'missing' ? (
                   <button
                     type="button"
-                    onClick={() => missingFilled && setMissingResolved(true)}
-                    disabled={!missingFilled}
+                    onClick={() => canSave && setMissingResolved(true)}
+                    disabled={!canSave}
                     aria-label="Mark missing fields as filled in"
                     className="flex size-7 shrink-0 items-center justify-center rounded-full transition disabled:opacity-30"
                     style={{ backgroundColor: colorAlpha('var(--neon-green)', 10), color: 'var(--neon-green)' }}
@@ -195,6 +205,7 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
                   onChange={(v) => setField(path, v)}
                   color={style.color}
                   type={FIELD_TYPES[path]}
+                  required={tier === 'missing' && (REQUIRED_FIELDS as readonly string[]).includes(path)}
                 />
               ))}
             </Tier>
@@ -270,16 +281,21 @@ function FieldRow({
   onChange,
   color,
   type = 'text',
+  required = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   color: string;
   type?: string;
+  required?: boolean;
 }) {
   return (
     <div>
-      <p className="mb-1 text-[10px] uppercase tracking-[0.04em] text-[var(--flat-text-faint)]">{label}</p>
+      <p className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.04em] text-[var(--flat-text-faint)]">
+        {label}
+        {required ? <span className="rounded-full bg-[rgba(244,114,182,0.15)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--neon-pink)]">Required</span> : null}
+      </p>
       <input
         type={type}
         value={value}
