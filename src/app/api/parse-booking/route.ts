@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { resolveEquipmentLine } from '@/lib/equipmentCatalog';
 import { aiParsedBookingSchema, AiParsedBookingParsed } from '@/lib/schemas/aiParsedBooking';
 import { AI_EXTRACTION_MODEL } from '@/lib/aiModel';
+import { ALL_SERVICES } from '@/lib/bookingTypes';
 
 const MODEL = AI_EXTRACTION_MODEL;
 
@@ -26,7 +27,7 @@ Return ONLY a single JSON object — no markdown fences, no preamble, no comment
   ],
   "services": [
     { "name": string, "confidence": "confirmed" | "assumed" | "missing" }
-  ],
+  ],   // "name" MUST be copied verbatim from the allowed list below — see the Services rule
   "notes": string,   // anything that is NOT a scheduling field — quote deadlines, special
                       // requests, pricing complaints, etc. NEVER put a response deadline
                       // like "need this by Monday" into any date field — it belongs here.
@@ -48,6 +49,18 @@ Confidence rules:
 For equipment "spec", extract size/dimension text as stated (e.g. "8x14ft") — do not resolve it to a catalog spec yourself, that happens downstream.
 For "eventType" pick the closest of: Wedding, Quinceañera, Birthday Party, Corporate, Sweet 16, Graduation, Anniversary, Other.
 Never guess a client email or phone number that is not present in the text — mark those "missing" instead.
+
+Services rule: "services" is a checklist, not free text. Only ever use names copied
+verbatim from this exact list — never invent a new name, never paraphrase one:
+${ALL_SERVICES.join(', ')}
+Include a service whenever the message implies it, even loosely — e.g. "sound" or
+"audio" implies "Sound System", "a stage" or "platform" implies "Stage", "screen and
+projector" implies "Projector & Screen". A big LED video wall/screen is equipment
+(goes in "equipment"), not "LED Backdrop" — only use "LED Backdrop" when the message
+specifically describes a backdrop-style LED panel (e.g. behind a step-and-repeat).
+If nothing in the message matches an item on the list, "services" is an empty array —
+do not fill it with anything not on the list.
+
 Output must be valid JSON and nothing else.`;
 
 function stripFences(text: string): string {
@@ -118,6 +131,12 @@ export async function POST(req: NextRequest) {
     );
   }
   const parsed = schemaResult.data;
+
+  // Services is a fixed checklist (matches the manual form's Step 5) — drop
+  // anything the model returned that isn't an exact match, rather than
+  // trusting prompt compliance alone.
+  const allowedServices = new Set<string>(ALL_SERVICES);
+  parsed.services = parsed.services.filter((s) => allowedServices.has(s.name));
 
   if (isNearEmpty(parsed)) {
     return NextResponse.json(
