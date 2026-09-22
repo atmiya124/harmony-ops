@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteBooking, getBookingById, updateBooking } from '@/lib/db/bookingRepo';
-import { Booking } from '@/lib/bookingTypes';
+import { bookingInputSchema } from '@/lib/schemas/booking';
+import { formatZodError } from '@/lib/schemas/formatZodError';
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -24,8 +25,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
-    const body = (await req.json()) as Booking;
-    const updated = await updateBooking(Number(id), body);
+    const json = await req.json().catch(() => null);
+    const result = bookingInputSchema.safeParse(json);
+    if (!result.success) {
+      return NextResponse.json({ error: formatZodError(result.error) }, { status: 400 });
+    }
+    // id/createdAt/updatedAt are server-assigned — updateBooking never
+    // reads them from the input, these placeholders just satisfy the type.
+    const updated = await updateBooking(Number(id), { ...result.data, id: Number(id), createdAt: '', updatedAt: '' });
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(updated);
   } catch (err) {

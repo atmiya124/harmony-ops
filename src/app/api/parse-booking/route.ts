@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { resolveEquipmentLine } from '@/lib/equipmentCatalog';
-import { AiParsedBooking } from '@/lib/aiParse';
+import { aiParsedBookingSchema, AiParsedBookingParsed } from '@/lib/schemas/aiParsedBooking';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -55,7 +55,7 @@ function stripFences(text: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
-function isNearEmpty(parsed: AiParsedBooking): boolean {
+function isNearEmpty(parsed: AiParsedBookingParsed): boolean {
   const hasClient = parsed.client?.name || parsed.client?.email || parsed.client?.phone;
   const hasSchedule = parsed.schedule?.eventDate;
   const hasVenue = parsed.venue?.location;
@@ -96,15 +96,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No text content returned by the model.' }, { status: 502 });
   }
 
-  let parsed: AiParsedBooking;
+  let rawParsed: unknown;
   try {
-    parsed = JSON.parse(stripFences(textBlock.text));
+    rawParsed = JSON.parse(stripFences(textBlock.text));
   } catch {
     return NextResponse.json(
       { error: "Could not make sense of that text — the model's response wasn't valid JSON. Try the manual form instead." },
       { status: 422 },
     );
   }
+
+  // Validates shape/types and fills in any field the model omitted — a
+  // structurally broken response (wrong types, garbage nesting) fails here
+  // with a clean 422 instead of corrupting a booking draft downstream.
+  const schemaResult = aiParsedBookingSchema.safeParse(rawParsed);
+  if (!schemaResult.success) {
+    return NextResponse.json(
+      { error: "Could not make sense of that text — the model's response didn't match the expected shape. Try the manual form instead." },
+      { status: 422 },
+    );
+  }
+  const parsed = schemaResult.data;
 
   if (isNearEmpty(parsed)) {
     return NextResponse.json(
@@ -113,15 +125,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Defensive backfill so the client always gets a complete shape.
-  parsed.client = parsed.client ?? { name: '', email: '', phone: '' };
-  parsed.schedule = parsed.schedule ?? { eventDate: '', setupTime: '', startTime: '', endTime: '', pickupDate: '', pickupTime: '' };
-  parsed.venue = parsed.venue ?? { eventType: '', location: '' };
-  parsed.equipment = parsed.equipment ?? [];
-  parsed.services = parsed.services ?? [];
-  parsed.notes = parsed.notes ?? '';
-  parsed.confidence = parsed.confidence ?? {};
-
   // Cross-reference every equipment line against the catalog, running the
   // real LED/stage calculator math when it resolves to a panel spec. If
   // the catalog lookup itself fails (e.g. DB unreachable), degrade to
@@ -129,7 +132,7 @@ export async function POST(req: NextRequest) {
   try {
     parsed.equipment = await Promise.all(
       parsed.equipment.map(async (item) => {
-        const resolved = await resolveEquipmentLine(item.itemName || '', item.spec || '', item.qty || 1, item.confidence || 'assumed');
+        const resolved = await resolveEquipmentLine(item.itemName, item.spec, item.qty, item.confidence);
         return { itemName: resolved.itemName, spec: resolved.spec, qty: resolved.qty, confidence: resolved.confidence };
       }),
     );
