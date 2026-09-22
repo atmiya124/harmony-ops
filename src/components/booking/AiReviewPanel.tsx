@@ -24,6 +24,11 @@ const FIELD_LABELS: Record<string, string> = {
 
 const SCALAR_FIELDS = Object.keys(FIELD_LABELS);
 
+const FIELD_TYPES: Record<string, string> = {
+  'schedule.eventDate': 'date',
+  'schedule.pickupDate': 'date',
+};
+
 const TIER_STYLE = {
   confirmed: { color: 'var(--neon-green)', bg: 'rgba(0,255,136,0.06)', border: 'rgba(0,255,136,0.25)', Icon: CheckCircle2, title: 'Auto-filled' },
   assumed: { color: 'var(--neon-orange)', bg: 'rgba(251,146,60,0.06)', border: 'rgba(251,146,60,0.3)', Icon: HelpCircle, title: 'Needs confirmation' },
@@ -124,7 +129,14 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
           return (
             <Tier key={tier} style={style} subtitle={tier === 'missing' ? "The email didn't include these — fill them in to save." : tier === 'assumed' ? 'Assumed or ambiguous — please verify.' : undefined}>
               {groups[tier].map((path) => (
-                <FieldRow key={path} label={FIELD_LABELS[path]} value={fields[path]} onChange={(v) => setField(path, v)} color={style.color} />
+                <FieldRow
+                  key={path}
+                  label={FIELD_LABELS[path]}
+                  value={fields[path]}
+                  onChange={(v) => setField(path, v)}
+                  color={style.color}
+                  type={FIELD_TYPES[path]}
+                />
               ))}
             </Tier>
           );
@@ -180,16 +192,29 @@ function Tier({ style, subtitle, children }: { style: (typeof TIER_STYLE)[AiConf
   );
 }
 
-function FieldRow({ label, value, onChange, color }: { label: string; value: string; onChange: (v: string) => void; color: string }) {
+function FieldRow({
+  label,
+  value,
+  onChange,
+  color,
+  type = 'text',
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  color: string;
+  type?: string;
+}) {
   return (
     <div>
       <p className="mb-1 text-[10px] uppercase tracking-[0.04em] text-[var(--flat-text-faint)]">{label}</p>
       <input
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="—"
         className="w-full rounded-lg border bg-[var(--flat-surface-input)] px-2.5 py-2 text-[13px] text-white outline-none"
-        style={{ borderColor: colorAlpha(color, 40) }}
+        style={{ borderColor: colorAlpha(color, 40), colorScheme: 'dark' }}
       />
     </div>
   );
