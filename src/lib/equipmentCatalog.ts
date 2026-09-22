@@ -2,6 +2,7 @@ import { db } from './db/client';
 import { equipmentCatalog, EquipmentCatalogRow } from './db/schema';
 import { calculateLedWall } from './ledCalculator';
 import { calculateStage } from './stageCalculator';
+import { parseDimensions } from './parseDimensions';
 
 export type AiConfidence = 'confirmed' | 'assumed' | 'missing';
 
@@ -10,18 +11,6 @@ export interface ResolvedEquipmentLine {
   spec: string;
   qty: number;
   confidence: AiConfidence;
-}
-
-const DIMENSION_RE = /(\d+(?:\.\d+)?)\s*(?:ft|feet|'|m|meters?)?\s*[x×]\s*(\d+(?:\.\d+)?)\s*(m|meters?)?/i;
-
-function parseDimensions(text: string): { w: number; h: number; unit: 'ft' | 'm' } | null {
-  const match = text.match(DIMENSION_RE);
-  if (!match) return null;
-  const w = parseFloat(match[1]);
-  const h = parseFloat(match[2]);
-  if (!w || !h) return null;
-  const unit = match[3] ? 'm' : 'ft';
-  return { w, h, unit };
 }
 
 let catalogCache: EquipmentCatalogRow[] | null = null;

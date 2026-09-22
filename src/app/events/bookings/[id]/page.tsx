@@ -11,6 +11,7 @@ import ActionLink from '@/components/booking/ActionLink';
 import ErrorState from '@/components/ui/ErrorState';
 import { buildReminderMailto, getPartnerSettings } from '@/lib/partnerApi';
 import { colorAlpha } from '@/lib/colorAlpha';
+import { deriveEquipmentBreakdown } from '@/lib/equipmentBreakdown';
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return 'No date set';
@@ -100,15 +101,33 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
 
       {booking.equipment.length > 0 && (
         <Card title="Equipment" badge={`${booking.equipment.length} items`}>
-          {booking.equipment.map((item, i) => (
-            <div key={item.id} className={`flex items-center gap-3 py-2.5 ${i === booking.equipment.length - 1 ? '' : 'border-b border-[var(--flat-border)]'}`}>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-bold text-white">{item.itemName}</p>
-                {item.spec ? <p className="mt-0.5 truncate text-[11px] text-[var(--flat-text-faint)]">{item.spec}</p> : null}
+          {booking.equipment.map((item, i) => {
+            const breakdown = deriveEquipmentBreakdown(item.itemName, item.spec);
+            return (
+              <div key={item.id} className={`py-2.5 ${i === booking.equipment.length - 1 ? '' : 'border-b border-[var(--flat-border)]'}`}>
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-bold text-white">{item.itemName}</p>
+                    {item.spec ? <p className="mt-0.5 truncate text-[11px] text-[var(--flat-text-faint)]">{item.spec}</p> : null}
+                  </div>
+                  <span className="text-[15px] font-bold text-[var(--neon-cyan)]">×{item.qty}</span>
+                </div>
+                {breakdown.length > 0 ? (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {breakdown.map((line) => (
+                      <span
+                        key={line.label}
+                        className="rounded-md px-2 py-1 text-[11px] font-bold text-[var(--neon-cyan)]"
+                        style={{ backgroundColor: colorAlpha('var(--neon-cyan)', 10) }}
+                      >
+                        {line.label} ×{line.value}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              <span className="text-[15px] font-bold text-[var(--neon-cyan)]">×{item.qty}</span>
-            </div>
-          ))}
+            );
+          })}
         </Card>
       )}
 
