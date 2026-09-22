@@ -4,19 +4,20 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, Sparkles } from 'lucide-react';
 import { AiParsedBooking, AiParseError, parseBookingEmail } from '@/lib/aiParse';
 
-export default function PasteEmailCard({ onParsed }: { onParsed: (parsed: AiParsedBooking) => void }) {
+export default function PasteEmailCard({ onParsed }: { onParsed: (parsed: AiParsedBooking, rawText: string) => void }) {
   const [expanded, setExpanded] = useState(true);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
-    if (!text.trim()) return;
+    const rawText = text.trim();
+    if (!rawText) return;
     setLoading(true);
     setError(null);
     try {
-      const parsed = await parseBookingEmail(text.trim());
-      onParsed(parsed);
+      const parsed = await parseBookingEmail(rawText);
+      onParsed(parsed, rawText);
     } catch (err) {
       setError(err instanceof AiParseError ? err.message : 'Something went wrong generating that draft.');
     } finally {

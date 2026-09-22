@@ -96,6 +96,24 @@ export const pricingSettings = sqliteTable('pricing_settings', {
   updatedAt: text('updated_at'),
 });
 
+// New table, introduced by harmony-ops — does not conflict with anything
+// that already exists in this database. Background audit trail for the
+// "paste email to pre-fill" AI flow: what was pasted, what the model
+// extracted, and what the staff member changed before saving. No UI reads
+// this yet — it exists purely so extraction quality/edits can be reviewed
+// later, directly in the database.
+export const aiExtractionAudit = sqliteTable('ai_extraction_audit', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  bookingId: integer('booking_id')
+    .notNull()
+    .references(() => bookings.id, { onDelete: 'cascade' }),
+  rawText: text('raw_text').notNull(),
+  aiResult: text('ai_result').notNull(), // JSON: the model's extracted draft, pre-edit
+  changes: text('changes').notNull(), // JSON: field-level diff between the draft and what was saved
+  model: text('model').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
 export type BookingRow = typeof bookings.$inferSelect;
 export type NewBookingRow = typeof bookings.$inferInsert;
 export type BookingEquipmentRow = typeof bookingEquipment.$inferSelect;
@@ -106,3 +124,5 @@ export type EquipmentCatalogRow = typeof equipmentCatalog.$inferSelect;
 export type NewEquipmentCatalogRow = typeof equipmentCatalog.$inferInsert;
 export type PricingSettingsRow = typeof pricingSettings.$inferSelect;
 export type NewPricingSettingsRow = typeof pricingSettings.$inferInsert;
+export type AiExtractionAuditRow = typeof aiExtractionAudit.$inferSelect;
+export type NewAiExtractionAuditRow = typeof aiExtractionAudit.$inferInsert;

@@ -25,7 +25,7 @@ interface Props {
   isEdit: boolean;
   onCancel: () => void;
   onSave: (booking: Booking) => void;
-  onAiParsed?: (parsed: AiParsedBooking) => void;
+  onAiParsed?: (parsed: AiParsedBooking, rawText: string) => void;
 }
 
 export default function NewBookingForm({ initial, isEdit, onCancel, onSave, onAiParsed }: Props) {

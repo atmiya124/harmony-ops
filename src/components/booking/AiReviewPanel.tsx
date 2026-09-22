@@ -5,6 +5,7 @@ import { AlertCircle, Check, CheckCircle2, HelpCircle, X } from 'lucide-react';
 import { AiConfidence, AiParsedBooking } from '@/lib/aiParse';
 import { Booking, EquipmentLine, blankBooking, blankEquipmentLine } from '@/lib/bookingTypes';
 import { colorAlpha } from '@/lib/colorAlpha';
+import type { AiExtractionChanges } from '@/lib/schemas/aiExtractionAudit';
 
 const REQUIRED_FIELDS = ['client.name', 'client.email', 'schedule.eventDate', 'venue.location'] as const;
 
@@ -29,20 +30,8 @@ const FIELD_TYPES: Record<string, string> = {
   'schedule.pickupDate': 'date',
 };
 
-const TIER_STYLE = {
-  confirmed: { color: 'var(--neon-green)', bg: 'rgba(0,255,136,0.06)', border: 'rgba(0,255,136,0.25)', Icon: CheckCircle2, title: 'Auto-filled' },
-  assumed: { color: 'var(--neon-orange)', bg: 'rgba(251,146,60,0.06)', border: 'rgba(251,146,60,0.3)', Icon: HelpCircle, title: 'Needs confirmation' },
-  missing: { color: 'var(--neon-pink)', bg: 'rgba(244,114,182,0.06)', border: 'rgba(244,114,182,0.3)', Icon: AlertCircle, title: 'Missing — required' },
-} as const;
-
-interface Props {
-  parsed: AiParsedBooking;
-  onCancel: () => void;
-  onConfirm: (booking: Booking) => void;
-}
-
-export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
-  const [fields, setFields] = useState<Record<string, string>>(() => ({
+function originalFieldValues(parsed: AiParsedBooking): Record<string, string> {
+  return {
     'client.name': parsed.client.name || '',
     'client.email': parsed.client.email || '',
     'client.phone': parsed.client.phone || '',
@@ -54,7 +43,23 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
     'schedule.pickupTime': parsed.schedule.pickupTime || '',
     'venue.eventType': parsed.venue.eventType || '',
     'venue.location': parsed.venue.location || '',
-  }));
+  };
+}
+
+const TIER_STYLE = {
+  confirmed: { color: 'var(--neon-green)', bg: 'rgba(0,255,136,0.06)', border: 'rgba(0,255,136,0.25)', Icon: CheckCircle2, title: 'Auto-filled' },
+  assumed: { color: 'var(--neon-orange)', bg: 'rgba(251,146,60,0.06)', border: 'rgba(251,146,60,0.3)', Icon: HelpCircle, title: 'Needs confirmation' },
+  missing: { color: 'var(--neon-pink)', bg: 'rgba(244,114,182,0.06)', border: 'rgba(244,114,182,0.3)', Icon: AlertCircle, title: 'Missing — required' },
+} as const;
+
+interface Props {
+  parsed: AiParsedBooking;
+  onCancel: () => void;
+  onConfirm: (booking: Booking, changes: AiExtractionChanges) => void;
+}
+
+export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
+  const [fields, setFields] = useState<Record<string, string>>(() => originalFieldValues(parsed));
   const [equipment, setEquipment] = useState<(EquipmentLine & { confidence: AiConfidence })[]>(() =>
     parsed.equipment.map((e, i) => ({ ...blankEquipmentLine(), id: -(i + 1), itemName: e.itemName, spec: e.spec, qty: e.qty, confidence: e.confidence })),
   );
@@ -110,7 +115,32 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
       equipment: equipment.map(({ confidence: _confidence, ...rest }) => rest),
       services: services.map((s) => s.name),
     };
-    onConfirm(booking);
+
+    const original = originalFieldValues(parsed);
+    const fieldChanges = SCALAR_FIELDS.filter((path) => fields[path] !== original[path]).map((path) => ({
+      path,
+      from: original[path],
+      to: fields[path],
+    }));
+
+    const originalEquipment = parsed.equipment.map((e) => ({ itemName: e.itemName, spec: e.spec, qty: e.qty }));
+    const finalEquipment = equipment.map((e) => ({ itemName: e.itemName, spec: e.spec, qty: e.qty }));
+    const equipmentChanged = JSON.stringify(originalEquipment) !== JSON.stringify(finalEquipment);
+
+    const originalServices = parsed.services.map((s) => s.name);
+    const finalServices = services.map((s) => s.name);
+    const servicesChanged = JSON.stringify(originalServices) !== JSON.stringify(finalServices);
+
+    const notesChanged = (parsed.notes || '') !== notes;
+
+    const changes: AiExtractionChanges = {
+      fields: fieldChanges,
+      equipment: equipmentChanged ? { from: originalEquipment, to: finalEquipment } : null,
+      services: servicesChanged ? { from: originalServices, to: finalServices } : null,
+      notes: notesChanged ? { from: parsed.notes || '', to: notes } : null,
+    };
+
+    onConfirm(booking, changes);
   };
 
   return (

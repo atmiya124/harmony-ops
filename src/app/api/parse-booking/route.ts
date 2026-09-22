@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { resolveEquipmentLine } from '@/lib/equipmentCatalog';
 import { aiParsedBookingSchema, AiParsedBookingParsed } from '@/lib/schemas/aiParsedBooking';
+import { AI_EXTRACTION_MODEL } from '@/lib/aiModel';
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = AI_EXTRACTION_MODEL;
 
 const SYSTEM_PROMPT = `You extract structured event-booking data from a pasted client email or chat message for an AV/LED-wall/stage rental company.
 
