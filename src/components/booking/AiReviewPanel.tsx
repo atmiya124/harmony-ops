@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { AlertCircle, Check, CheckCircle2, HelpCircle, X } from 'lucide-react';
 import { AiConfidence, AiParsedBooking } from '@/lib/aiParse';
 import { Booking, EquipmentLine, blankBooking, blankEquipmentLine } from '@/lib/bookingTypes';
@@ -65,7 +65,10 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
 
   const setField = (path: string, value: string) => setFields((prev) => ({ ...prev, [path]: value }));
 
-  const groups = useMemo(() => {
+  // Grouped once, from the draft's initial values — not recalculated as
+  // the user types, otherwise a "missing" field would jump to a different
+  // tier (and lose focus) after the very first keystroke.
+  const [groups] = useState<Record<AiConfidence, string[]>>(() => {
     const byTier: Record<AiConfidence, string[]> = { confirmed: [], assumed: [], missing: [] };
     for (const path of SCALAR_FIELDS) {
       const value = fields[path];
@@ -80,9 +83,9 @@ export default function AiReviewPanel({ parsed, onCancel, onConfirm }: Props) {
       }
     }
     return byTier;
-  }, [fields, parsed.confidence]);
+  });
 
-  const canSave = groups.missing.length === 0;
+  const canSave = (REQUIRED_FIELDS as readonly string[]).every((path) => fields[path]?.trim());
 
   const handleConfirm = () => {
     if (!canSave) return;
