@@ -7,7 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { and, desc, eq, gte, inArray, isNull, lte, ne, or, type SQL } from 'drizzle-orm';
 import { db } from './client';
 import { attachments, authUser, bookings, expenses, financeAuditLog, reimbursements, type ExpenseRow, type ReimbursementRow } from './schema';
-import { getPartnerEmails, normalizeEmail } from '../auth/allowlist';
+import { getPartnerEmails, normalizeEmail, partnerDisplayName } from '../auth/allowlist';
 import { checkExpenseChangeAgainstPayments, checkNewReimbursement, reimbursementState, type ReimbursementState } from '../finance/reimbursement';
 import type { AuditAction, AuditEntityType, ExpenseCategory } from '../finance/types';
 import type { ExpenseInput, ExpenseUpdate, ReimbursementInput } from '../schemas/finance';
@@ -76,7 +76,7 @@ export async function listPartners(): Promise<PartnerInfo[]> {
   const users = await db.select({ email: authUser.email, name: authUser.name, image: authUser.image }).from(authUser).where(inArray(authUser.email, emails));
   const byEmail = new Map(users.map((u) => [normalizeEmail(u.email), u]));
   return emails
-    .map((email) => ({ email, name: byEmail.get(email)?.name ?? null, image: byEmail.get(email)?.image ?? null }))
+    .map((email) => ({ email, name: partnerDisplayName(email, byEmail.get(email)?.name), image: byEmail.get(email)?.image ?? null }))
     .sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email));
 }
 

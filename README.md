@@ -284,6 +284,7 @@ Set these in `.env` locally and in **Vercel → Project → Settings → Environ
 | `BETTER_AUTH_URL` | `http://localhost:3000` locally, or the production URL on Vercel |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | From step 1 |
 | `PARTNER_EMAILS` | The four partners' Google addresses, comma-separated |
+| `PARTNER_NAMES` (optional) | First names to show in the app, e.g. `someone@gmail.com=Atmiya,other@gmail.com=Ankit`. Doesn't affect sign-in. Partners without an entry show their Google name |
 
 To add or remove a partner, edit `PARTNER_EMAILS` and redeploy. Removing an address cuts off that person's access on their next request, even if they are still signed in.
 

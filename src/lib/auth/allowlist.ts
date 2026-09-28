@@ -20,6 +20,33 @@ export function getPartnerEmails(): Set<string> {
   return parsePartnerEmails(process.env.PARTNER_EMAILS);
 }
 
+// Optional display names, from PARTNER_NAMES as comma-separated
+// `email=Name` pairs (e.g. "someone@gmail.com=Atmiya, other@gmail.com=Ankit").
+// Kept separate from PARTNER_EMAILS so a typo in a name can never affect
+// who is allowed to sign in. Partners without an entry fall back to their
+// Google name.
+export function parsePartnerNames(raw: string | undefined): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const entry of (raw ?? '').split(/[,;\n]+/)) {
+    const eq = entry.indexOf('=');
+    if (eq < 0) continue;
+    const email = normalizeEmail(entry.slice(0, eq));
+    const name = entry.slice(eq + 1).trim();
+    if (email.includes('@') && name) names.set(email, name);
+  }
+  return names;
+}
+
+export function getPartnerNames(): Map<string, string> {
+  return parsePartnerNames(process.env.PARTNER_NAMES);
+}
+
+// The name to show for a partner: the configured one, else the fallback
+// (their Google name), else the part of the email before "@".
+export function partnerDisplayName(email: string, fallback?: string | null, names: Map<string, string> = getPartnerNames()): string {
+  return names.get(normalizeEmail(email)) || fallback?.trim() || email.split('@')[0];
+}
+
 export function isApprovedPartner(email: string | null | undefined, allowlist: Set<string> = getPartnerEmails()): boolean {
   if (!email) return false;
   return allowlist.has(normalizeEmail(email));

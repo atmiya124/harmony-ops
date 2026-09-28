@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { auth } from './auth';
-import { isApprovedPartner } from './allowlist';
+import { isApprovedPartner, partnerDisplayName } from './allowlist';
 
 export interface Partner {
   id: string;
@@ -18,7 +18,7 @@ export async function getPartnerFromHeaders(requestHeaders: Headers): Promise<Pa
   const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session || !isApprovedPartner(session.user.email)) return null;
   const { id, name, email, image } = session.user;
-  return { id, name, email, image: image ?? null };
+  return { id, name: partnerDisplayName(email, name), email, image: image ?? null };
 }
 
 export async function getCurrentPartner(): Promise<Partner | null> {

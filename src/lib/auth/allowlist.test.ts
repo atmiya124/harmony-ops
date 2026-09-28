@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkGoogleIdentity, isApprovedPartner, parsePartnerEmails } from './allowlist';
+import { checkGoogleIdentity, isApprovedPartner, parsePartnerEmails, parsePartnerNames, partnerDisplayName } from './allowlist';
 
 const allowlist = parsePartnerEmails(' Alice@Example.com, bob@example.com ;carol@example.com\ndave@example.com,, not-an-email ');
 
@@ -24,6 +24,19 @@ test('rejects addresses not on the list, including lookalikes', () => {
   assert.equal(isApprovedPartner('xalice@example.com', allowlist), false);
   assert.equal(isApprovedPartner(null, allowlist), false);
   assert.equal(isApprovedPartner('', allowlist), false);
+});
+
+test('partner display names from PARTNER_NAMES', () => {
+  const names = parsePartnerNames(' Alice@Example.com=Alice , bob@example.com = Bob;carol@example.com=Carol\nbroken-entry, dave@example.com=  , =NoEmail');
+  assert.deepEqual([...names.entries()].sort(), [
+    ['alice@example.com', 'Alice'],
+    ['bob@example.com', 'Bob'],
+    ['carol@example.com', 'Carol'],
+  ]);
+  assert.equal(partnerDisplayName('ALICE@example.com', 'Alice Google Name', names), 'Alice');
+  assert.equal(partnerDisplayName('dave@example.com', 'Dave Google', names), 'Dave Google'); // no configured name
+  assert.equal(partnerDisplayName('eve@example.com', null, names), 'eve'); // nothing at all
+  assert.equal(parsePartnerNames(undefined).size, 0);
 });
 
 test('Google identity must be verified AND approved', () => {
