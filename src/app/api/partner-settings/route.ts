@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { partnerSettings } from '@/lib/db/schema';
+import { withPartner } from '@/lib/auth/session';
 
-export async function GET() {
+async function handleGET() {
   try {
     const [row] = await db.select().from(partnerSettings).limit(1);
     if (!row) return NextResponse.json({ companyName: '', partnerEmails: [] });
@@ -14,3 +15,5 @@ export async function GET() {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
   }
 }
+
+export const GET = withPartner(handleGET);

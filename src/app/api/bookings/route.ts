@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createBooking, listBookings } from '@/lib/db/bookingRepo';
 import { bookingInputSchema } from '@/lib/schemas/booking';
 import { formatZodError } from '@/lib/schemas/formatZodError';
+import { withPartner } from '@/lib/auth/session';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Unknown error';
 }
 
-export async function GET() {
+async function handleGET() {
   try {
     const bookings = await listBookings();
     return NextResponse.json(bookings);
@@ -16,7 +17,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
     const json = await req.json().catch(() => null);
     const result = bookingInputSchema.safeParse(json);
@@ -34,3 +35,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: errorMessage(err) }, { status: 500 });
   }
 }
+
+export const GET = withPartner(handleGET);
+export const POST = withPartner(handlePOST);

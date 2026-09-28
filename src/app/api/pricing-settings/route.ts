@@ -6,8 +6,9 @@ import { DEFAULT_LED_RATE } from '@/lib/ledCalculator';
 import { DEFAULT_STAGE_RATE } from '@/lib/stageCalculator';
 import { pricingSettingsInputSchema } from '@/lib/schemas/pricingSettings';
 import { formatZodError } from '@/lib/schemas/formatZodError';
+import { withPartner } from '@/lib/auth/session';
 
-export async function GET() {
+async function handleGET() {
   try {
     const [row] = await db.select().from(pricingSettings).limit(1);
     if (!row) return NextResponse.json({ ledPricePerSqft: DEFAULT_LED_RATE, stagePricePerPanel: DEFAULT_STAGE_RATE });
@@ -17,7 +18,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePUT(req: Request) {
   try {
     const json = await req.json().catch(() => null);
     const result = pricingSettingsInputSchema.safeParse(json);
@@ -39,3 +40,6 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
   }
 }
+
+export const GET = withPartner(handleGET);
+export const PUT = withPartner(handlePUT);

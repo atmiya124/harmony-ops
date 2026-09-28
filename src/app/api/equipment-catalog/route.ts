@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { equipmentCatalog } from '@/lib/db/schema';
+import { withPartner } from '@/lib/auth/session';
 
-export async function GET() {
+async function handleGET() {
   try {
     const rows = await db.select().from(equipmentCatalog);
     return NextResponse.json(rows);
@@ -10,3 +11,5 @@ export async function GET() {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
   }
 }
+
+export const GET = withPartner(handleGET);

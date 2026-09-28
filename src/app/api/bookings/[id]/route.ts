@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { deleteBooking, getBookingById, updateBooking } from '@/lib/db/bookingRepo';
 import { bookingInputSchema } from '@/lib/schemas/booking';
 import { formatZodError } from '@/lib/schemas/formatZodError';
+import { withPartner } from '@/lib/auth/session';
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -11,7 +12,7 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Unknown error';
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+async function handleGET(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     const booking = await getBookingById(Number(id));
@@ -22,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+async function handlePATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     const json = await req.json().catch(() => null);
@@ -40,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+async function handleDELETE(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     await deleteBooking(Number(id));
@@ -49,3 +50,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: errorMessage(err) }, { status: 500 });
   }
 }
+
+export const GET = withPartner(handleGET);
+export const PATCH = withPartner(handlePATCH);
+export const DELETE = withPartner(handleDELETE);

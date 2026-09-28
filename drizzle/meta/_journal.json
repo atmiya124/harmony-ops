@@ -22,6 +22,13 @@
       "when": 1790090495189,
       "tag": "0002_overconfident_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790568394236,
+      "tag": "0003_auth_tables",
+      "breakpoints": true
     }
   ]
 }

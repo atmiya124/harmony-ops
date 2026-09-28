@@ -191,6 +191,7 @@ The goal is not to assume the model is always correct. The system combines valid
 - Turso / libSQL
 - Drizzle ORM
 - Lucide React
+- Better Auth (Google sign-in)
 
 ## Architecture
 
@@ -256,6 +257,58 @@ Set up the database:
 ```bash
 npm run db:push
 npm run db:seed
+```
+
+> **Shared database:** the production Turso database is shared with Event-booking-app. Don't run `db:push` against it. Apply new migrations with `npm run db:apply -- drizzle/<file>.sql`. It refuses anything other than `CREATE TABLE` / `CREATE INDEX` on Harmony Ops' own tables, it refuses any statement that touches a table that already exists, and it refuses to re-apply a migration. Take a backup with `npm run db:backup` first. The dump goes to the git-ignored `backups/` folder and is checked by restoring it.
+
+## Authentication
+
+Harmony Ops uses [Better Auth](https://www.better-auth.com) with Google sign-in. Only the four partner addresses listed in `PARTNER_EMAILS` can sign in, and each address must be verified by Google. There are no passwords.
+
+### 1. Create the Google OAuth client
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project (or reuse one).
+2. Under **APIs & Services → OAuth consent screen**, choose **External**, fill in the app name and support email, and add the scopes `openid`, `email` and `profile`. Leave the app in **Testing** and add the four partner Gmail addresses as **Test users**. That is a second allowlist enforced by Google itself.
+3. Under **APIs & Services → Credentials**, click **Create credentials → OAuth client ID → Web application**.
+   - **Authorized JavaScript origins:** `http://localhost:3000` and your production URL, e.g. `https://harmony-ops.vercel.app`.
+   - **Authorized redirect URIs:** `http://localhost:3000/api/auth/callback/google` and `https://<your-production-domain>/api/auth/callback/google`.
+4. Copy the client ID and client secret.
+
+### 2. Set environment variables
+
+Set these in `.env` locally and in **Vercel → Project → Settings → Environment Variables** for production. Never commit them.
+
+| Variable | Value |
+|---|---|
+| `BETTER_AUTH_SECRET` | A random secret. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Use a different value for each environment. |
+| `BETTER_AUTH_URL` | `http://localhost:3000` locally, or the production URL on Vercel |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | From step 1 |
+| `PARTNER_EMAILS` | The four partners' Google addresses, comma-separated |
+
+To add or remove a partner, edit `PARTNER_EMAILS` and redeploy. Removing an address cuts off that person's access on their next request, even if they are still signed in.
+
+### 3. Create the auth tables
+
+Back up the database first (e.g. `turso db shell <db> .dump > backup.sql`), then run:
+
+```bash
+npm run db:apply -- drizzle/0003_auth_tables.sql --dry-run   # shows what will be created
+npm run db:apply -- drizzle/0003_auth_tables.sql
+```
+
+This creates `auth_user`, `auth_session`, `auth_account` and `auth_verification`. No existing table is changed.
+
+### How access is enforced
+
+- `src/proxy.ts` redirects requests that have no session cookie to `/login`. This is only a fast first check.
+- The root layout validates the session and the allowlist on every page load.
+- Every `/api` route is wrapped in `withPartner` (`src/lib/auth/session.ts`), which returns `401` without a valid partner session.
+- Sessions last 30 days and renew as they're used. Sign out from the profile menu in the top-right corner.
+
+## Tests
+
+```bash
+npm test
 ```
 
 Start the development server:

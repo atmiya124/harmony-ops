@@ -4,6 +4,7 @@ import { resolveEquipmentLine } from '@/lib/equipmentCatalog';
 import { aiParsedBookingSchema, AiParsedBookingParsed } from '@/lib/schemas/aiParsedBooking';
 import { AI_EXTRACTION_MODEL } from '@/lib/aiModel';
 import { ALL_SERVICES } from '@/lib/bookingTypes';
+import { withPartner } from '@/lib/auth/session';
 
 const MODEL = AI_EXTRACTION_MODEL;
 
@@ -78,7 +79,7 @@ function isNearEmpty(parsed: AiParsedBookingParsed): boolean {
   return !hasClient && !hasSchedule && !hasVenue && !hasEquipment && !hasNotes;
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured on the server.' }, { status: 500 });
@@ -165,3 +166,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(parsed);
 }
+
+export const POST = withPartner(handlePOST);
