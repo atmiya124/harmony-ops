@@ -50,11 +50,11 @@ const SLATE_BACKDROP: React.CSSProperties = {
 const EMBER_FADE = 'linear-gradient(180deg, transparent 58%, var(--bg) 92%)';
 const EMBER_LAYERS: { className: string; background: string }[] = [
   // Faint warmth rising into the dark top.
-  { className: 'ember-warmth', background: 'radial-gradient(ellipse 75% 37% at 75% 46%, rgba(150, 60, 20, 0.35), transparent 75%)' },
+  { className: 'ember-warmth', background: 'radial-gradient(ellipse 75% 20% at 75% 50%, rgba(150, 60, 20, 0.35), transparent 75%)' },
   // Ember band along the bottom of the glow.
-  { className: 'ember-band', background: 'radial-gradient(ellipse 71% 17% at 54% 58%, rgba(232, 100, 28, 0.7), rgba(180, 64, 18, 0.3) 50%, transparent 80%)' },
+  { className: 'ember-band', background: 'radial-gradient(ellipse 71% 9% at 54% 58%, rgba(232, 100, 28, 0.7), rgba(180, 64, 18, 0.3) 50%, transparent 80%)' },
   // Hot corner, low right.
-  { className: 'ember-core', background: 'radial-gradient(ellipse 46% 25% at 92% 57%, rgba(255, 168, 64, 0.95), rgba(240, 110, 30, 0.55) 40%, transparent 78%)' },
+  { className: 'ember-core', background: 'radial-gradient(ellipse 46% 13% at 92% 57%, rgba(255, 168, 64, 0.95), rgba(240, 110, 30, 0.55) 40%, transparent 78%)' },
 ];
 
 function EmberBackdrop() {
