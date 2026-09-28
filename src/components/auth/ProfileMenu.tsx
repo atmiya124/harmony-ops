@@ -28,8 +28,6 @@ export default function ProfileMenu({ partner }: { partner: Partner }) {
     window.location.assign('/login');
   };
 
-  const firstName = partner.name.split(' ')[0] || partner.email;
-
   return (
     <div ref={ref} className="relative">
       <button
@@ -37,10 +35,9 @@ export default function ProfileMenu({ partner }: { partner: Partner }) {
         onClick={() => setOpen((o) => !o)}
         aria-label="Profile menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-[var(--flat-border)] bg-[var(--flat-surface)] py-1 pl-1 pr-3"
+        className="flex size-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.06] backdrop-blur-md"
       >
         <Avatar partner={partner} />
-        <span className="text-xs font-bold text-[var(--flat-text-dim)]">{firstName}</span>
       </button>
 
       {open ? (
@@ -67,10 +64,10 @@ function Avatar({ partner }: { partner: Partner }) {
     // Google profile photos come from lh3.googleusercontent.com; a plain
     // <img> avoids configuring next/image remote patterns for one avatar.
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={partner.image} alt="" referrerPolicy="no-referrer" className="size-7 rounded-full" />;
+    return <img src={partner.image} alt="" referrerPolicy="no-referrer" className="size-11 rounded-full" />;
   }
   return (
-    <span className="flex size-7 items-center justify-center rounded-full bg-[rgba(0,212,255,0.18)] text-xs font-bold text-[var(--neon-cyan)]">
+    <span className="flex size-11 items-center justify-center rounded-full text-lg font-bold text-white">
       {initial}
     </span>
   );

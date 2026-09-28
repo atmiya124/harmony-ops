@@ -6,6 +6,7 @@ import { CalendarCheck2, ChevronRight, MapPin, Truck, Clock as ClockIcon } from 
 import StatusBadge from '@/components/booking/StatusBadge';
 import ErrorState from '@/components/ui/ErrorState';
 import { useBookings } from '@/hooks/useBookings';
+import Screen from '@/components/navigation/Screen';
 
 function to12hr(time: string): string {
   if (!time) return '—';
@@ -19,7 +20,7 @@ function to12hr(time: string): string {
   }
 }
 
-export default function TodayPage() {
+function TodayPage() {
   const { bookings, loading, error } = useBookings();
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -101,5 +102,14 @@ export default function TodayPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Animated like a native screen push/pop (see components/navigation).
+export default function Page() {
+  return (
+    <Screen title="Bookings" section="bookings">
+      <TodayPage />
+    </Screen>
   );
 }

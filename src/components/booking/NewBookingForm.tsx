@@ -74,7 +74,7 @@ export default function NewBookingForm({ initial, isEdit, onCancel, onSave, onAi
         <button type="button" onClick={() => (step > 1 ? back() : onCancel())} className="p-1 text-white">
           <ArrowLeft size={18} />
         </button>
-        <p className="text-[15px] font-bold text-white">{isEdit ? 'Edit Booking' : 'New Booking'}</p>
+        <p className="text-xs text-[var(--flat-text-faint)]">{isEdit ? 'Update the booking details' : 'Step by step, or paste an inquiry'}</p>
         <div className="w-[26px]" />
       </div>
 

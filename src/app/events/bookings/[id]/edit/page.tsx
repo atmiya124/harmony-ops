@@ -6,8 +6,9 @@ import NewBookingForm from '@/components/booking/NewBookingForm';
 import { Booking } from '@/lib/bookingTypes';
 import { getBooking, updateBooking } from '@/lib/bookingsApi';
 import ErrorState from '@/components/ui/ErrorState';
+import Screen from '@/components/navigation/Screen';
 
-export default function EditBookingPage({ params }: { params: Promise<{ id: string }> }) {
+function EditBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -45,5 +46,14 @@ export default function EditBookingPage({ params }: { params: Promise<{ id: stri
         }}
       />
     </div>
+  );
+}
+
+// Animated like a native screen push/pop (see components/navigation).
+export default function Page(props: React.ComponentProps<typeof EditBookingPage>) {
+  return (
+    <Screen title="Edit booking" back>
+      <EditBookingPage {...props} />
+    </Screen>
   );
 }

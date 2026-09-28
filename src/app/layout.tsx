@@ -5,6 +5,8 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import AppNav from '@/components/AppNav';
 import ProfileMenu from '@/components/auth/ProfileMenu';
+import ExpenseEntryProvider from '@/components/expenses/ExpenseEntryProvider';
+import NavDirectionTracker from '@/components/navigation/NavDirectionTracker';
 import { getCurrentPartner } from '@/lib/auth/session';
 import { LOGIN_PATH, PATHNAME_HEADER } from '@/lib/auth/constants';
 
@@ -32,11 +34,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <div className="pointer-events-none absolute left-1/2 -top-48 size-96 -translate-x-1/2 rounded-full bg-white opacity-[0.01] blur-[110px]" />
           {partner && !isLoginPage ? (
             <>
-              <header className="relative z-40 flex justify-end px-4 pt-4">
+              {/* Top-right account button, level with each page's title. */}
+              <header className="absolute right-4 top-4 z-40" style={{ viewTransitionName: 'app-header' }}>
                 <ProfileMenu partner={partner} />
               </header>
-              <main className="relative px-4 pb-32 pt-3">{children}</main>
-              <AppNav />
+              <ExpenseEntryProvider>
+                <NavDirectionTracker />
+                <main className="relative px-4 pb-32 pt-4">{children}</main>
+                <AppNav />
+              </ExpenseEntryProvider>
             </>
           ) : (
             <main className="relative px-4 pb-16 pt-6">{children}</main>

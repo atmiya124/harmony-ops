@@ -6,8 +6,9 @@ import { getPricingSettings, savePricingSettings } from '@/lib/pricingApi';
 import { DEFAULT_LED_RATE } from '@/lib/ledCalculator';
 import { DEFAULT_STAGE_RATE } from '@/lib/stageCalculator';
 import ErrorState from '@/components/ui/ErrorState';
+import Screen from '@/components/navigation/Screen';
 
-export default function CalculatorSettingsPage() {
+function CalculatorSettingsPage() {
   const [ledRate, setLedRate] = useState('');
   const [stageRate, setStageRate] = useState('');
   const [loading, setLoading] = useState(true);
@@ -54,10 +55,7 @@ export default function CalculatorSettingsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-xl font-bold text-white">Settings</p>
-        <p className="mt-0.5 text-xs text-[var(--flat-text-faint)]">Manage pricing used across the LED and stage calculators</p>
-      </div>
+      <p className="text-xs text-[var(--flat-text-faint)]">Manage pricing used across the LED and stage calculators</p>
 
       {error ? <ErrorState message={error} /> : null}
 
@@ -122,5 +120,14 @@ function RateField({
         <span className="shrink-0 text-[11px] text-[var(--flat-text-faint)]">{unit}</span>
       </div>
     </label>
+  );
+}
+
+// Animated like a native screen push/pop (see components/navigation).
+export default function Page() {
+  return (
+    <Screen title="Pricing" back section="calculator">
+      <CalculatorSettingsPage />
+    </Screen>
   );
 }

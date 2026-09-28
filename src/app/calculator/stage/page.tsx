@@ -14,8 +14,9 @@ import Support8Icon from '@/components/icons/Support8Icon';
 import SupportIcon from '@/components/icons/SupportIcon';
 import { calculateStage, calculateStagePrice, ftToUnit, unitToFt, fmt, STAGE_QUICK_SIZES, Orientation, Unit } from '@/lib/stageCalculator';
 import { usePricingSettings } from '@/hooks/usePricingSettings';
+import Screen from '@/components/navigation/Screen';
 
-export default function StageCalculatorPage() {
+function StageCalculatorPage() {
   const { rates } = usePricingSettings();
   const [unit, setUnit] = useState<Unit>('ft');
   const [orientation, setOrientation] = useState<Orientation>('horizontal');
@@ -149,5 +150,14 @@ export default function StageCalculatorPage() {
         </Accordion>
       ) : null}
     </div>
+  );
+}
+
+// Animated like a native screen push/pop (see components/navigation).
+export default function Page() {
+  return (
+    <Screen title="Stage Calculator" back section="calculator">
+      <StageCalculatorPage />
+    </Screen>
   );
 }

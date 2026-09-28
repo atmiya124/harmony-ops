@@ -12,8 +12,9 @@ import CablesSection from '@/components/led/CablesSection';
 import PricingSection from '@/components/led/PricingSection';
 import { calculateLedWall, calculateLedPrice, mmToUnit, unitToMm, fmt, AspectPreset, QUICK_SIZES, Unit } from '@/lib/ledCalculator';
 import { usePricingSettings } from '@/hooks/usePricingSettings';
+import Screen from '@/components/navigation/Screen';
 
-export default function CalculatorPage() {
+function CalculatorPage() {
   const { rates } = usePricingSettings();
   const [unit, setUnit] = useState<Unit>('ft');
   const [widthInput, setWidthInput] = useState('20');
@@ -244,5 +245,14 @@ export default function CalculatorPage() {
         </Accordion>
       ) : null}
     </div>
+  );
+}
+
+// Animated like a native screen push/pop (see components/navigation).
+export default function Page() {
+  return (
+    <Screen title="LED Calculator" back section="calculator">
+      <CalculatorPage />
+    </Screen>
   );
 }

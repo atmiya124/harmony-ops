@@ -9,8 +9,9 @@ import { createBooking } from '@/lib/bookingsApi';
 import { AiParsedBooking } from '@/lib/aiParse';
 import { logAiExtraction } from '@/lib/aiAuditApi';
 import type { AiExtractionChanges } from '@/lib/schemas/aiExtractionAudit';
+import Screen from '@/components/navigation/Screen';
 
-export default function NewBookingPage() {
+function NewBookingPage() {
   const router = useRouter();
   const [parsed, setParsed] = useState<AiParsedBooking | null>(null);
   const [rawText, setRawText] = useState('');
@@ -55,5 +56,14 @@ export default function NewBookingPage() {
         <NewBookingForm initial={blankBooking()} isEdit={false} onCancel={() => router.back()} onSave={handleSave} onAiParsed={handleAiParsed} />
       )}
     </div>
+  );
+}
+
+// Animated like a native screen push/pop (see components/navigation).
+export default function Page() {
+  return (
+    <Screen title="New booking" back>
+      <NewBookingPage />
+    </Screen>
   );
 }
