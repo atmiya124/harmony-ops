@@ -33,3 +33,6 @@ next-env.d.ts
 
 # database backups (contain client data — never commit)
 /backups/
+
+# local-only receipt storage used in development (RECEIPT_STORAGE=local)
+/.data/

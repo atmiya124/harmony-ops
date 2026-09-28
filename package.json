@@ -13,11 +13,13 @@
     "db:studio": "drizzle-kit studio",
     "db:apply": "tsx --env-file=.env src/lib/db/applyMigration.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "db:backup": "tsx --env-file=.env src/lib/db/backup.ts"
+    "db:backup": "tsx --env-file=.env src/lib/db/backup.ts",
+    "storage:check": "tsx --env-file=.env src/lib/storage/checkBlob.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
     "@libsql/client": "^0.15.15",
+    "@vercel/blob": "^2.8.0",
     "better-auth": "^1.7.6",
     "drizzle-orm": "^0.45.3",
     "lucide-react": "^0.545.0",
