@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import AreaTrend from '@/components/charts/AreaTrend';
 import ColumnTrend from '@/components/charts/ColumnTrend';
@@ -12,7 +12,8 @@ import ExpenseList from '@/components/expenses/ExpenseList';
 import { CATEGORY_META } from '@/components/expenses/categoryMeta';
 import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import ErrorState from '@/components/ui/ErrorState';
-import { getPartners, listExpenses, type ExpenseDto, type PartnerOption } from '@/lib/financeApi';
+import { DASHBOARD_EXPENSES_FILTER, expensesKey, FINANCE_PARTNERS_KEY, getPartners, listExpenses } from '@/lib/financeApi';
+import { useCachedData } from '@/hooks/useCachedData';
 import { accumulate, bucketize, currentPeriod, DATE_RANGES, inPeriod, previousPeriod, type DateRangeKey } from '@/lib/dateRanges';
 import { formatCents, formatCentsWhole, percentChange } from '@/lib/money';
 import { todayLocal } from '@/lib/finance/dates';
@@ -25,26 +26,15 @@ import { EXPENSE_CATEGORIES } from '@/lib/finance/types';
 export default function FinancesDashboard() {
   const { version, openNewExpense } = useExpenseEntry();
   const [range, setRange] = useState<DateRangeKey>('1M');
-  const [expenses, setExpenses] = useState<ExpenseDto[] | null>(null);
-  const [partners, setPartners] = useState<PartnerOption[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const today = todayLocal();
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([listExpenses({ limit: 2000 }), getPartners()])
-      .then(([rows, p]) => {
-        if (cancelled) return;
-        setExpenses(rows);
-        setPartners(p.partners);
-        setError(null);
-      })
-      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : 'Could not load finances'));
-    return () => {
-      cancelled = true;
-    };
-  }, [version]);
+  // Shown at once on a return visit; refreshed on open and after every change.
+  const expensesData = useCachedData(expensesKey(DASHBOARD_EXPENSES_FILTER), () => listExpenses(DASHBOARD_EXPENSES_FILTER), version);
+  const partnersData = useCachedData(FINANCE_PARTNERS_KEY, getPartners, version);
+  const expenses = expensesData.data ?? null;
+  const partners = partnersData.data?.partners ?? [];
+  const error = expensesData.error ?? partnersData.error;
 
   const view = useMemo(() => {
     if (!expenses) return null;

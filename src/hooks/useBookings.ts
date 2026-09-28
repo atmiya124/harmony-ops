@@ -1,31 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Booking } from '@/lib/bookingTypes';
-import { listBookings } from '@/lib/bookingsApi';
+import { useCachedData } from './useCachedData';
+import { BOOKINGS_KEY, listBookings } from '@/lib/bookingsApi';
 
+// All bookings. Shows the last list seen straight away on a return visit and
+// refreshes it in the background.
 export function useBookings() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    listBookings()
-      .then((data) => {
-        if (cancelled) return;
-        setBookings(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Failed to load bookings.');
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return { bookings, loading, error };
+  const { data, loading, error } = useCachedData(BOOKINGS_KEY, listBookings);
+  return { bookings: data ?? [], loading, error };
 }

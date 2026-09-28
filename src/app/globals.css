@@ -167,6 +167,16 @@ html[data-nav='none']::view-transition-new(.screen-in) {
   }
 }
 
+/* The blinking caret after the amount while the expense keypad is open. */
+.amount-caret {
+  animation: amount-caret-blink 1.05s steps(1) infinite;
+}
+@keyframes amount-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    Home's ember glow (<Screen backdrop="ember">): three gradient layers drift
    and breathe on slow, out-of-step loops so the light feels alive without
@@ -191,6 +201,11 @@ html[data-nav='none']::view-transition-new(.screen-in) {
 .ember-warmth {
   animation-name: ember-warmth;
   animation-duration: 17s;
+}
+/* Hold the glow still while a sheet is open, so the phone's GPU is free for
+   the sheet itself. */
+body:has([aria-modal='true']) :is(.ember-core, .ember-band, .ember-warmth) {
+  animation-play-state: paused;
 }
 @keyframes ember-core {
   0% {
@@ -236,7 +251,8 @@ html[data-nav='none']::view-transition-new(.screen-in) {
   }
   .ember-core,
   .ember-band,
-  .ember-warmth {
+  .ember-warmth,
+  .amount-caret {
     animation: none;
   }
 }

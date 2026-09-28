@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CalendarDays, Home as HomeIcon, Wallet } from 'lucide-react';
 import { NavTab } from './navTypes';
+import { prefetchFinancesData } from '@/lib/financeApi';
 
 type TabIcon = (props: { size?: number; className?: string }) => React.ReactNode;
 
@@ -25,6 +26,13 @@ function resolveTab(pathname: string): NavTab {
   return 'home';
 }
 
+// Once the app is idle, loads the Finances screen's code (mostly the charts
+// library) and data, so the first visit to Finances doesn't wait for either.
+function preloadFinances() {
+  void import('@/components/finances/FinancesDashboard').catch(() => {});
+  prefetchFinancesData();
+}
+
 // Apple-style tab bar: frosted glass that blurs whatever scrolls behind it,
 // and a single white fill that slides to the tapped tab.
 export default function AppNav() {
@@ -36,6 +44,15 @@ export default function AppNav() {
   const activeTab = pending && pending.from === pathname ? pending.tab : resolveTab(pathname);
   const activeIndex = TABS.findIndex((t) => t.key === activeTab);
 
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(preloadFinances, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(preloadFinances, 2000); // Safari has no requestIdleCallback
+    return () => window.clearTimeout(id);
+  }, []);
+
   return (
     // The transition name sits on the glass pill itself, not on this wrapper:
     // a named ancestor becomes the blur's backdrop root and hides the page.
@@ -43,7 +60,7 @@ export default function AppNav() {
       <nav
         aria-label="Main"
         style={{ viewTransitionName: 'app-nav' }}
-        className="pointer-events-auto relative overflow-hidden rounded-full border border-white/[0.12] bg-[rgba(24,29,37,0.55)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-2xl backdrop-saturate-[1.8]"
+        className="pointer-events-auto relative overflow-hidden rounded-full border border-white/[0.12] bg-[rgba(24,29,37,0.55)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl backdrop-saturate-[1.8]"
       >
         <div className="relative flex items-center gap-1 p-1.5">
           {/* The sliding fill: one element, moved with a transform (GPU),
@@ -59,6 +76,8 @@ export default function AppNav() {
               <Link
                 key={key}
                 href={href}
+                // Fully load each tab in advance so tapping it is instant.
+                prefetch
                 aria-label={label}
                 aria-current={isActive ? 'page' : undefined}
                 data-nav="fade"

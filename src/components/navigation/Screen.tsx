@@ -40,12 +40,14 @@ const SLATE_BACKDROP: React.CSSProperties = {
   background: 'linear-gradient(180deg, #25324a 0%, rgba(30, 42, 62, 0.55) 38%, transparent 100%)',
 };
 
-// Dark at the top, glowing orange low and to the right, then faded to black
-// by the mask so it melts into the page background. Three layers drift and
+// Dark at the top, glowing orange low and to the right, then faded into the
+// page background. Three layers drift and
 // breathe on their own slow loops (see .ember-* in globals.css). Each layer
 // overhangs the box by 10% so its moving edges never show; positions below
 // are in the layer's own (larger) coordinates.
-const EMBER_MASK = 'linear-gradient(180deg, #000 0%, #000 58%, transparent 92%)';
+// The fade is a plain gradient layer on top rather than a CSS mask: a mask
+// over moving layers is re-rendered every frame on iPhone (Safari).
+const EMBER_FADE = 'linear-gradient(180deg, transparent 58%, var(--bg) 92%)';
 const EMBER_LAYERS: { className: string; background: string }[] = [
   // Faint warmth rising into the dark top.
   { className: 'ember-warmth', background: 'radial-gradient(ellipse 75% 37% at 75% 46%, rgba(150, 60, 20, 0.35), transparent 75%)' },
@@ -57,14 +59,11 @@ const EMBER_LAYERS: { className: string; background: string }[] = [
 
 function EmberBackdrop() {
   return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 h-[420px] overflow-hidden"
-      style={{ maskImage: EMBER_MASK, WebkitMaskImage: EMBER_MASK }}
-    >
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[420px] overflow-hidden">
       {EMBER_LAYERS.map(({ className, background }) => (
         <div key={className} className={`absolute -inset-[10%] ${className}`} style={{ background }} />
       ))}
+      <div className="absolute inset-0" style={{ background: EMBER_FADE }} />
     </div>
   );
 }

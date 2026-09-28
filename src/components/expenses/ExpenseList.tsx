@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { ChevronRight, Paperclip, Receipt } from 'lucide-react';
 import { CATEGORY_META } from './categoryMeta';
 import { useExpenseEntry } from './ExpenseEntryProvider';
 import { colorAlpha } from '@/lib/colorAlpha';
-import { listExpenses, type ExpenseDto, type ExpenseListFilter } from '@/lib/financeApi';
+import { expensesKey, listExpenses, type ExpenseListFilter } from '@/lib/financeApi';
+import { useCachedData } from '@/hooks/useCachedData';
 import { formatCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 import { REIMBURSEMENT_STATUS_LABELS } from '@/lib/finance/types';
@@ -24,23 +24,9 @@ export default function ExpenseList({
   showEvent?: boolean;
 }) {
   const { version, openEditExpense } = useExpenseEntry();
-  const [expenses, setExpenses] = useState<ExpenseDto[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const filterKey = JSON.stringify(filter ?? {});
-
-  useEffect(() => {
-    let cancelled = false;
-    listExpenses({ ...JSON.parse(filterKey), limit })
-      .then((rows) => {
-        if (cancelled) return;
-        setExpenses(rows);
-        setError(null);
-      })
-      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : 'Could not load expenses'));
-    return () => {
-      cancelled = true;
-    };
-  }, [filterKey, limit, version]);
+  const query: ExpenseListFilter = { ...filter, limit };
+  const { data, error } = useCachedData(expensesKey(query), () => listExpenses(query), version);
+  const expenses = data ?? null;
 
   if (error) return <p className="py-3 text-center text-xs text-[var(--neon-pink)]">{error}</p>;
   if (!expenses) {

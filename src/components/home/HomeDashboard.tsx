@@ -7,6 +7,7 @@ import PlatformIcon from '@/components/icons/PlatformIcon';
 import StatusBadge from '@/components/booking/StatusBadge';
 import ErrorState from '@/components/ui/ErrorState';
 import { useBookings } from '@/hooks/useBookings';
+import { useCachedData } from '@/hooks/useCachedData';
 import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import { buildReminderMailto, getPartnerSettings } from '@/lib/partnerApi';
 import type { Booking } from '@/lib/bookingTypes';
@@ -41,15 +42,9 @@ const QUICK_LINKS: { href: string; title: string; subtitle: string; icon: (p: { 
 export default function HomeDashboard({ firstName }: { firstName: string }) {
   const { bookings, loading, error } = useBookings();
   const { openNewExpense } = useExpenseEntry();
-  const [partnerEmails, setPartnerEmails] = useState<string[]>([]);
+  const partnerEmails = useCachedData('partner-settings', getPartnerSettings).data?.partnerEmails ?? [];
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const today = todayLocal();
-
-  useEffect(() => {
-    getPartnerSettings()
-      .then((s) => setPartnerEmails(s.partnerEmails))
-      .catch(() => {});
-  }, []);
 
   const { upcoming, completedThisMonth, nextEvent } = useMemo(() => {
     const active = bookings.filter((b) => b.eventDate && b.eventDate >= today && (b.status === 'Confirmed' || b.status === 'Tentative'));
@@ -88,7 +83,7 @@ export default function HomeDashboard({ firstName }: { firstName: string }) {
 
       <div className="grid grid-cols-2 gap-3">
         {QUICK_LINKS.map(({ href, title, subtitle, icon: Icon }) => (
-          <Link key={href} href={href} className="flex items-center gap-2.5 rounded-2xl border border-[var(--flat-border)] bg-[var(--flat-surface)] py-3.5 pl-3 pr-2 transition hover:border-[var(--flat-border-strong)]">
+          <Link key={href} href={href} prefetch className="flex items-center gap-2.5 rounded-2xl border border-[var(--flat-border)] bg-[var(--flat-surface)] py-3.5 pl-3 pr-2 transition hover:border-[var(--flat-border-strong)]">
             <Icon size={22} className="shrink-0 text-white/85" />
             <span className="min-w-0 flex-1">
               <span className="block text-[13.5px] font-bold leading-tight text-white">{title}</span>
@@ -216,7 +211,7 @@ function NextEventCard({ booking, partnerEmails }: { booking: Booking; partnerEm
         {place ? <Row icon={MapPin} text={place} /> : null}
       </div>
 
-      <Link href={`/events/bookings/${booking.id}`} className="mt-3 flex items-center justify-between border-t border-white/[0.08] pt-2.5">
+      <Link href={`/events/bookings/${booking.id}`} prefetch className="mt-3 flex items-center justify-between border-t border-white/[0.08] pt-2.5">
         <span className="text-sm font-bold text-white">View event</span>
         <ChevronRight size={18} className="text-white/60" />
       </Link>
@@ -276,7 +271,7 @@ function QuickAddSheet({ onClose, onExpense }: { onClose: () => void; onExpense:
             </span>
             <ChevronRight size={18} className="text-white/35" />
           </button>
-          <Link href="/events/bookings/new" onClick={onClose} className="flex w-full items-center gap-3.5 rounded-2xl border border-[var(--flat-border)] bg-white/[0.03] p-4">
+          <Link href="/events/bookings/new" prefetch onClick={onClose} className="flex w-full items-center gap-3.5 rounded-2xl border border-[var(--flat-border)] bg-white/[0.03] p-4">
             <span className="flex size-11 items-center justify-center rounded-full bg-[rgba(0,212,255,0.14)]">
               <CalendarDays size={20} className="text-[var(--neon-cyan)]" />
             </span>

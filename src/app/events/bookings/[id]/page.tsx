@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Bell, Calendar, Check, ChevronRight, Clock, Mail, MapPin, Phone, Plus, Truck, type LucideIcon } from 'lucide-react';
 import { Booking, BookingStatus, STATUSES } from '@/lib/bookingTypes';
-import { deleteBooking, getBooking, updateBooking } from '@/lib/bookingsApi';
+import { bookingKey, deleteBooking, getBooking, updateBooking } from '@/lib/bookingsApi';
+import { peekCache } from '@/lib/clientCache';
+import { useCachedData } from '@/hooks/useCachedData';
 import { statusColor } from '@/components/booking/StatusBadge';
 import ErrorState from '@/components/ui/ErrorState';
 import { buildReminderMailto, getPartnerSettings } from '@/lib/partnerApi';
@@ -55,19 +57,18 @@ function whenLabel(dateStr: string): string | null {
 function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [booking, setBooking] = useState<Booking | null>(null);
+  // Opened from a list, the booking is usually cached already: show it at
+  // once and refresh it from the server.
+  const [booking, setBooking] = useState<Booking | null>(() => peekCache<Booking>(bookingKey(id)) ?? null);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [partnerEmails, setPartnerEmails] = useState<string[]>([]);
+  const partnerEmails = useCachedData('partner-settings', getPartnerSettings).data?.partnerEmails ?? [];
   const { openNewExpense } = useExpenseEntry();
 
   useEffect(() => {
     getBooking(id)
       .then((b) => (b ? setBooking(b) : setError('Booking not found.')))
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load booking.'));
-    getPartnerSettings()
-      .then((s) => setPartnerEmails(s.partnerEmails))
-      .catch(() => {});
   }, [id]);
 
   if (error) return <ErrorState message={error} />;

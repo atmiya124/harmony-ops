@@ -4,12 +4,15 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Banknote, Building2, Camera, ChevronDown, CreditCard, FileText, Loader2, Send, Trash2, X } from 'lucide-react';
 import { CATEGORY_META } from './categoryMeta';
 import ReimbursementPanel from './ReimbursementPanel';
+import AmountKeypad from './AmountKeypad';
 import DateChip from '@/components/ui/DateChip';
 import { colorAlpha } from '@/lib/colorAlpha';
 import {
   ApiError,
   createExpense,
   deleteExpense,
+  expensesKey,
+  FINANCE_PARTNERS_KEY,
   getExpense,
   getPartners,
   listExpenses,
@@ -22,7 +25,8 @@ import {
   type ExpenseFormValues,
   type PartnerOption,
 } from '@/lib/financeApi';
-import { listBookings } from '@/lib/bookingsApi';
+import { BOOKINGS_KEY, listBookings } from '@/lib/bookingsApi';
+import { loadCached, peekCache } from '@/lib/clientCache';
 import type { Booking } from '@/lib/bookingTypes';
 import { centsToInput, formatCents, parseAmountToCents } from '@/lib/money';
 import { hstIncluded } from '@/lib/finance/tax';
@@ -31,6 +35,7 @@ import { findLikelyDuplicate } from '@/lib/finance/duplicates';
 import { addDays, friendlyDate, todayLocal } from '@/lib/finance/dates';
 import { readExpensePrefs, writeExpensePrefs } from '@/lib/devicePrefs';
 import { prepareReceipt } from '@/lib/receiptImage';
+import { applyKeypadKey, formatKeypadAmount, keypadKeyFromKeyboard, type KeypadKey } from '@/lib/amountKeypad';
 import { DEFAULT_HST_RATE_BP, EXPENSE_CATEGORIES, PAYMENT_METHOD_LABELS, type ExpenseCategory, type FundingSource, type PaymentMethod } from '@/lib/finance/types';
 
 type Request = { mode: 'new'; bookingId: number | null } | { mode: 'edit'; expenseId: string };
@@ -84,7 +89,7 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
   const [amountText, setAmountText] = useState('');
   const [category, setCategory] = useState<ExpenseCategory | null>(null);
   const [bookingId, setBookingId] = useState<number | null>(request.mode === 'new' ? request.bookingId : null);
-  const [paidByEmail, setPaidByEmail] = useState('');
+  const [paidByEmail, setPaidByEmail] = useState(() => (request.mode === 'new' ? (peekCache<{ me: string }>(FINANCE_PARTNERS_KEY)?.me ?? '') : ''));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(prefs.paymentMethod ?? 'personal_card');
   const [cashLikeFunding, setCashLikeFunding] = useState<FundingSource>(prefs.fundingForCashLike ?? 'personal');
   const [waiveReimbursement, setWaiveReimbursement] = useState(false);
@@ -98,10 +103,13 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
   const [receipt, setReceipt] = useState<ReceiptState>({ status: 'none' });
   const receiptUpload = useRef<Promise<string | null> | null>(null);
 
-  const [partners, setPartners] = useState<PartnerOption[]>([]);
-  const [me, setMe] = useState('');
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [recent, setRecent] = useState<ExpenseDto[]>([]);
+  // Reference data: whatever is cached shows at once (partner chips, event
+  // list, duplicate check); fresh copies load behind it.
+  const recentFilter = { from: addDays(today, -45) };
+  const [partners, setPartners] = useState<PartnerOption[]>(() => peekCache<{ partners: PartnerOption[] }>(FINANCE_PARTNERS_KEY)?.partners ?? []);
+  const [me, setMe] = useState(() => peekCache<{ me: string }>(FINANCE_PARTNERS_KEY)?.me ?? '');
+  const [bookings, setBookings] = useState<Booking[]>(() => peekCache<Booking[]>(BOOKINGS_KEY) ?? []);
+  const [recent, setRecent] = useState<ExpenseDto[]>(() => peekCache<ExpenseDto[]>(expensesKey(recentFilter)) ?? []);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -109,7 +117,9 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [open, setOpen] = useState(false);
-  const amountRef = useRef<HTMLInputElement>(null);
+  // The in-app amount keypad. A new expense starts on it so you can type
+  // straight away without the phone keyboard; an edit starts on the form.
+  const [keypadOpen, setKeypadOpen] = useState(!isEdit);
 
   // Slide in; lock page scroll behind the sheet.
   useEffect(() => {
@@ -124,17 +134,18 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
 
   // Reference data. The form is usable immediately; these fill in behind it.
   useEffect(() => {
-    getPartners()
+    loadCached(FINANCE_PARTNERS_KEY, getPartners)
       .then(({ me, partners }) => {
         setPartners(partners);
         setMe(me);
         setPaidByEmail((current) => current || me);
       })
       .catch((err) => setFormError(err instanceof Error ? err.message : 'Could not load partners'));
-    listBookings()
+    loadCached(BOOKINGS_KEY, listBookings)
       .then(setBookings)
       .catch(() => {});
-    listExpenses({ from: addDays(today, -45) })
+    const recentQuery = { from: addDays(today, -45) };
+    loadCached(expensesKey(recentQuery), () => listExpenses(recentQuery))
       .then(setRecent)
       .catch(() => {});
   }, [today]);
@@ -172,10 +183,7 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
   }
 
   useEffect(() => {
-    if (request.mode !== 'edit') {
-      amountRef.current?.focus();
-      return;
-    }
+    if (request.mode !== 'edit') return;
     getExpense(request.expenseId)
       .then((e) => {
         if (e.deletedAt) throw new Error('This expense was deleted.');
@@ -191,6 +199,36 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
     setDirty(true);
     setFormError(null);
   };
+
+  function pressKey(key: KeypadKey) {
+    setAmountText((text) => applyKeypadKey(text, key));
+    setFieldErrors((f) => ({ ...f, amountCents: '' }));
+    touch();
+  }
+
+  // Typing on a computer keyboard works too while the keypad is showing
+  // (but never steals keys from the note or HST fields).
+  useEffect(() => {
+    if (!keypadOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        setKeypadOpen(false);
+        return;
+      }
+      const key = keypadKeyFromKeyboard(e.key);
+      if (!key) return;
+      e.preventDefault();
+      setAmountText((text) => applyKeypadKey(text, key));
+      setFieldErrors((f) => ({ ...f, amountCents: '' }));
+      setDirty(true);
+      setFormError(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [keypadOpen]);
 
   const parsedAmount = parseAmountToCents(amountText);
   const amountCents = parsedAmount.ok ? parsedAmount.cents : 0;
@@ -397,26 +435,24 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
             <div className="space-y-5">
               {/* Amount — the one thing you always type. */}
               <div className="pt-2 text-center">
-                <label className="flex items-baseline justify-center gap-1">
-                  <span className={`text-[44px] font-bold leading-none ${amountText ? 'text-white' : 'text-white/25'}`}>$</span>
-                  <input
-                    ref={amountRef}
-                    value={amountText}
-                    onChange={(e) => {
-                      setAmountText(e.target.value.replace(/[^\d.,]/g, ''));
-                      setFieldErrors((f) => ({ ...f, amountCents: '' }));
-                      touch();
-                    }}
-                    inputMode="decimal"
-                    enterKeyHint="done"
-                    autoComplete="off"
-                    placeholder="0.00"
-                    aria-label="Amount in Canadian dollars"
-                    aria-invalid={Boolean(fieldErrors.amountCents)}
-                    style={{ fontSize: 44, fontWeight: 700, width: `${Math.max(amountText.length, 4) + 0.5}ch` }}
-                    className="min-w-0 max-w-[75%] bg-transparent text-left leading-none tracking-tight text-white outline-none placeholder:text-white/25"
-                  />
-                </label>
+                {/* Tapping the amount brings the keypad back. No text input here,
+                    so the phone keyboard never opens for it. */}
+                <button
+                  type="button"
+                  onClick={() => setKeypadOpen(true)}
+                  aria-label={`Amount in Canadian dollars: ${amountText ? '$' + formatKeypadAmount(amountText) : 'not entered'}`}
+                  aria-expanded={keypadOpen}
+                  data-amount={amountText}
+                  className="inline-flex max-w-full items-center justify-center gap-1 rounded-2xl px-2"
+                >
+                  <span style={{ fontSize: 44, fontWeight: 700, lineHeight: 1 }} className={amountText ? 'text-white' : 'text-white/25'}>
+                    $
+                  </span>
+                  <span style={{ fontSize: 44, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em' }} className={`truncate ${amountText ? 'text-white' : 'text-white/25'}`}>
+                    {amountText ? formatKeypadAmount(amountText) : '0.00'}
+                  </span>
+                  {keypadOpen ? <span aria-hidden className="amount-caret ml-0.5 h-10 w-[3px] rounded-full bg-[var(--neon-cyan)]" /> : null}
+                </button>
                 <p className="mt-1.5 text-xs text-[var(--flat-text-faint)]">CAD · total paid, tax included</p>
                 {fieldErrors.amountCents ? <FieldError message={fieldErrors.amountCents} center /> : null}
               </div>
@@ -447,6 +483,7 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
                         onClick={() => {
                           setCategory(c);
                           setFieldErrors((f) => ({ ...f, category: '' }));
+                          setKeypadOpen(false);
                           touch();
                         }}
                         className={`flex flex-col items-center gap-1.5 rounded-2xl border py-2.5 transition ${
@@ -698,6 +735,14 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
           )}
         </div>
 
+        {keypadOpen && !loadingExisting ? (
+          <AmountKeypad
+            hint={!amountText ? 'Enter the amount' : !parsedAmount.ok ? parsedAmount.error : !category ? 'Next: choose a category' : 'Ready to save'}
+            canContinue={parsedAmount.ok}
+            onKey={pressKey}
+            onContinue={() => setKeypadOpen(false)}
+          />
+        ) : (
         <div className="shrink-0 border-t border-white/[0.06] bg-[#0b1118] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
           <button
             type="button"
@@ -719,6 +764,7 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
             </button>
           ) : null}
         </div>
+        )}
       </div>
     </div>
   );
