@@ -29,6 +29,13 @@
       "when": 1790568394236,
       "tag": "0003_auth_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790618430760,
+      "tag": "0004_finance_tables",
+      "breakpoints": true
     }
   ]
 }

@@ -42,6 +42,13 @@ export function checkStatement(statement: string): StatementCheck {
   if ((SHARED_TABLES as readonly string[]).includes(table.toLowerCase())) {
     return { statement, table, ok: false, reason: `"${table}" belongs to Event-booking-app and must not be modified.` };
   }
+  // A foreign key into a shared table would let our constraints block (or
+  // cascade from) the other app's deletes — link by id in app code instead.
+  const referenced = [...statement.matchAll(/REFERENCES\s+[`"[]?(\w+)[`"\]]?/gi)].map((m) => m[1].toLowerCase());
+  const sharedRef = referenced.find((t) => (SHARED_TABLES as readonly string[]).includes(t));
+  if (sharedRef) {
+    return { statement, table, ok: false, reason: `Foreign key to shared table "${sharedRef}" is not allowed; validate the id in app code.` };
+  }
   // A single statement must not smuggle a second one after a semicolon.
   if (statement.replace(/;\s*$/, '').includes(';')) {
     return { statement, table, ok: false, reason: 'Multiple statements in one chunk.' };
