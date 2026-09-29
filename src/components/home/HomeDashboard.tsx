@@ -63,7 +63,7 @@ export default function HomeDashboard({ firstName }: { firstName: string }) {
       {/* Hero — the "Harmony Ops" title is in the shared screen header. */}
       <section className="relative -mt-3">
         {/* Fills the empty right side of the hero, just above the glow. */}
-        <HeroLogo className="absolute right-0 top-3 w-[42%] max-w-[168px]" />
+        <HeroLogo className="absolute right-0 top-10 w-[42%] max-w-[168px]" />
         <div className="relative">
           <p className="text-[17px] text-white/75">
             {greeting()}
@@ -249,7 +249,9 @@ function QuickAddSheet({ open, onClose, onExpense }: { open: boolean; onClose: (
       <button type="button" aria-label="Close" tabIndex={-1} onClick={onClose} className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${open ? 'opacity-100' : 'opacity-0'}`} />
       <div
         role="dialog"
-        aria-modal="true"
+        // Only while open: globals.css pauses the Home glow whenever an
+        // aria-modal element is on the page, and this sheet stays mounted.
+        aria-modal={open ? true : undefined}
         aria-label="Quick add"
         className={`relative w-full max-w-[480px] rounded-t-[28px] border-t border-white/10 bg-[#0b1118] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform motion-reduce:transition-none ${
           open ? 'translate-y-0' : 'translate-y-full'

@@ -41,28 +41,50 @@ const SLATE_BACKDROP: React.CSSProperties = {
 };
 
 // Dark at the top, glowing orange low and to the right, then faded into the
-// page background. Three layers drift and
-// breathe on their own slow loops (see .ember-* in globals.css). Each layer
-// overhangs the box by 10% so its moving edges never show; positions below
-// are in the layer's own (larger) coordinates.
-// The fade is a plain gradient layer on top rather than a CSS mask: a mask
+// page background. Two glow layers drift and breathe on their own slow loops,
+// and between them an ember wave rolls sideways and swells (see .ember-* in
+// globals.css). Each glow layer overhangs the box by 10% so its moving edges
+// never show; positions below are in the layer's own (larger) coordinates.
+// The fades are plain gradient layers on top rather than CSS masks: a mask
 // over moving layers is re-rendered every frame on iPhone (Safari).
-const EMBER_FADE = 'linear-gradient(180deg, transparent 58%, var(--bg) 92%)';
-const EMBER_LAYERS: { className: string; background: string }[] = [
-  // Faint warmth rising into the dark top.
-  { className: 'ember-warmth', background: 'radial-gradient(ellipse 75% 20% at 75% 50%, rgba(150, 60, 20, 0.35), transparent 75%)' },
-  // Ember band along the bottom of the glow.
-  { className: 'ember-band', background: 'radial-gradient(ellipse 71% 9% at 54% 58%, rgba(232, 100, 28, 0.7), rgba(180, 64, 18, 0.3) 50%, transparent 80%)' },
-  // Hot corner, low right.
-  { className: 'ember-core', background: 'radial-gradient(ellipse 46% 13% at 92% 57%, rgba(255, 168, 64, 0.95), rgba(240, 110, 30, 0.55) 40%, transparent 78%)' },
-];
+const EMBER_FADE = 'linear-gradient(180deg, transparent 51%, var(--bg) 85%)';
+// Dims the wave toward the left so the light still gathers on the right.
+const EMBER_SIDE_FADE = 'linear-gradient(90deg, color-mix(in srgb, var(--bg) 70%, transparent), transparent 55%)';
+const EMBER_WARMTH = { className: 'ember-warmth', background: 'radial-gradient(ellipse 75% 20% at 75% 44%, rgba(150, 60, 20, 0.35), transparent 75%)' };
+const EMBER_CORE = { className: 'ember-core', background: 'radial-gradient(ellipse 46% 13% at 92% 51%, rgba(255, 168, 64, 0.95), rgba(240, 110, 30, 0.55) 40%, transparent 78%)' };
+
+// Two periods of a sine-like curve across the 1200-wide viewBox, extended a
+// period past each side so the blur never thins out at the edges. The layer is
+// twice the screen width and slides left by half, so the loop is seamless.
+const WAVE_PATH = 'M-600 60 C-500 38 -400 38 -300 60 S-100 82 0 60 S200 38 300 60 S500 82 600 60 S800 38 900 60 S1100 82 1200 60 S1400 38 1500 60 S1700 82 1800 60';
+
+function EmberWave() {
+  return (
+    // Centred where the old ember band sat (~220px down).
+    <div className="ember-wave-swell absolute inset-x-0 top-[160px] h-[120px]">
+      <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="ember-wave-roll absolute inset-y-0 left-0 h-full w-[200%]">
+        <defs>
+          <filter id="ember-wave-soft" filterUnits="userSpaceOnUse" x="-100" y="-60" width="1400" height="240">
+            <feGaussianBlur stdDeviation="16 14" />
+          </filter>
+          <filter id="ember-wave-hot" filterUnits="userSpaceOnUse" x="-100" y="-60" width="1400" height="240">
+            <feGaussianBlur stdDeviation="7 5" />
+          </filter>
+        </defs>
+        <path d={WAVE_PATH} fill="none" stroke="rgb(232, 100, 28)" strokeOpacity="0.62" strokeWidth="34" filter="url(#ember-wave-soft)" />
+        <path d={WAVE_PATH} fill="none" stroke="rgb(255, 150, 60)" strokeOpacity="0.5" strokeWidth="7" filter="url(#ember-wave-hot)" />
+      </svg>
+    </div>
+  );
+}
 
 function EmberBackdrop() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[420px] overflow-hidden">
-      {EMBER_LAYERS.map(({ className, background }) => (
-        <div key={className} className={`absolute -inset-[10%] ${className}`} style={{ background }} />
-      ))}
+      <div className={`absolute -inset-[10%] ${EMBER_WARMTH.className}`} style={{ background: EMBER_WARMTH.background }} />
+      <EmberWave />
+      <div className="absolute inset-0" style={{ background: EMBER_SIDE_FADE }} />
+      <div className={`absolute -inset-[10%] ${EMBER_CORE.className}`} style={{ background: EMBER_CORE.background }} />
       <div className="absolute inset-0" style={{ background: EMBER_FADE }} />
     </div>
   );

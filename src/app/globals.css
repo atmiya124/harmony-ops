@@ -178,13 +178,14 @@ html[data-nav='none']::view-transition-new(.screen-in) {
 }
 
 /* ---------------------------------------------------------------------------
-   Home's ember glow (<Screen backdrop="ember">): three gradient layers drift
-   and breathe on slow, out-of-step loops so the light feels alive without
+   Home's ember glow (<Screen backdrop="ember">): two gradient layers drift
+   and breathe on slow, out-of-step loops, and the ember wave between them
+   rolls sideways while it gently swells, so the light feels alive without
    drawing the eye. Transform/opacity only, so it stays on the GPU.
    --------------------------------------------------------------------------- */
 .ember-core,
-.ember-band,
-.ember-warmth {
+.ember-warmth,
+.ember-wave-swell {
   will-change: transform, opacity;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
@@ -194,9 +195,14 @@ html[data-nav='none']::view-transition-new(.screen-in) {
   animation-name: ember-core;
   animation-duration: 9s;
 }
-.ember-band {
-  animation-name: ember-band;
-  animation-duration: 13s;
+.ember-wave-swell {
+  animation-name: ember-wave-swell;
+  animation-duration: 6.5s;
+}
+/* Linear and endless: one full slide of the doubled-width wave per loop. */
+.ember-wave-roll {
+  will-change: transform;
+  animation: ember-wave-roll 16s linear infinite;
 }
 .ember-warmth {
   animation-name: ember-warmth;
@@ -204,7 +210,7 @@ html[data-nav='none']::view-transition-new(.screen-in) {
 }
 /* Hold the glow still while a sheet is open, so the phone's GPU is free for
    the sheet itself. */
-body:has([aria-modal='true']) :is(.ember-core, .ember-band, .ember-warmth) {
+body:has([aria-modal='true']) :is(.ember-core, .ember-warmth, .ember-wave-swell, .ember-wave-roll) {
   animation-play-state: paused;
 }
 @keyframes ember-core {
@@ -221,14 +227,22 @@ body:has([aria-modal='true']) :is(.ember-core, .ember-band, .ember-warmth) {
     opacity: 0.95;
   }
 }
-@keyframes ember-band {
+@keyframes ember-wave-swell {
   0% {
-    transform: translate3d(-4%, 0, 0) scale(1);
-    opacity: 0.85;
+    transform: translate3d(0, 4px, 0) scaleY(0.85);
+    opacity: 0.8;
   }
   100% {
-    transform: translate3d(6%, -3%, 0) scale(1.12);
+    transform: translate3d(0, -6px, 0) scaleY(1.2);
     opacity: 1;
+  }
+}
+@keyframes ember-wave-roll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
   }
 }
 @keyframes ember-warmth {
@@ -281,8 +295,9 @@ body:has([aria-modal='true']) :is(.hero-logo-float, .hero-logo-shine) {
     animation: none !important;
   }
   .ember-core,
-  .ember-band,
   .ember-warmth,
+  .ember-wave-swell,
+  .ember-wave-roll,
   .hero-logo-float,
   .hero-logo-shine,
   .amount-caret {
