@@ -126,22 +126,23 @@ export default function HomeDashboard({ firstName }: { firstName: string }) {
         <button
           type="button"
           onClick={() => setQuickAddOpen(true)}
-          className="pointer-events-auto flex w-full max-w-[448px] items-center justify-center gap-2 rounded-full bg-white py-3.5 text-[#0a0a0a] shadow-lg shadow-black/50"
+          aria-haspopup="dialog"
+          aria-expanded={quickAddOpen}
+          className="pointer-events-auto flex w-full max-w-[448px] touch-manipulation select-none items-center justify-center gap-2 rounded-full bg-white py-3.5 text-[#0a0a0a] shadow-lg shadow-black/50 transition-[transform,background-color] duration-75 active:scale-[0.97] active:bg-white/80"
         >
           <Plus size={20} />
           <span className="text-[16px] font-bold">Quick Add</span>
         </button>
       </div>
 
-      {quickAddOpen ? (
-        <QuickAddSheet
-          onClose={() => setQuickAddOpen(false)}
-          onExpense={() => {
-            setQuickAddOpen(false);
-            openNewExpense();
-          }}
-        />
-      ) : null}
+      <QuickAddSheet
+        open={quickAddOpen}
+        onClose={() => setQuickAddOpen(false)}
+        onExpense={() => {
+          setQuickAddOpen(false);
+          openNewExpense();
+        }}
+      />
     </div>
   );
 }
@@ -230,26 +231,24 @@ function Row({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
 }
 
 // A two-option chooser: most additions on the go are expenses, so that's first.
-function QuickAddSheet({ onClose, onExpense }: { onClose: () => void; onExpense: () => void }) {
-  const [open, setOpen] = useState(false);
+// Always mounted (hidden and inert while closed) so a tap starts the slide-in
+// on the very next frame instead of waiting for a mount + animation frame.
+function QuickAddSheet({ open, onClose, onExpense }: { open: boolean; onClose: () => void; onExpense: () => void }) {
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setOpen(true));
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center">
-      <button type="button" aria-label="Close" tabIndex={-1} onClick={onClose} className={`absolute inset-0 bg-black/60 transition-opacity duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${open ? 'opacity-100' : 'opacity-0'}`} />
+    <div inert={!open} aria-hidden={!open} className={`fixed inset-0 z-[60] flex items-end justify-center ${open ? '' : 'pointer-events-none'}`}>
+      <button type="button" aria-label="Close" tabIndex={-1} onClick={onClose} className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${open ? 'opacity-100' : 'opacity-0'}`} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Quick add"
-        className={`relative w-full max-w-[480px] rounded-t-[28px] border-t border-white/10 bg-[#0b1118] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 transition-transform duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform motion-reduce:transition-none ${
+        className={`relative w-full max-w-[480px] rounded-t-[28px] border-t border-white/10 bg-[#0b1118] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform motion-reduce:transition-none ${
           open ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
