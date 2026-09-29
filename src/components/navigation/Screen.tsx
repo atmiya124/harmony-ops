@@ -71,12 +71,17 @@ function EmberWave() {
             <feGaussianBlur stdDeviation="7 5" />
           </filter>
         </defs>
-        <path d={WAVE_PATH} fill="none" stroke="rgb(232, 100, 28)" strokeOpacity="0.62" strokeWidth="34" filter="url(#ember-wave-soft)" />
-        <path d={WAVE_PATH} fill="none" stroke="rgb(255, 150, 60)" strokeOpacity="0.5" strokeWidth="7" filter="url(#ember-wave-hot)" />
+        <path d={WAVE_PATH} fill="none" stroke="rgb(232, 100, 28)" strokeOpacity="0.45" strokeWidth="34" filter="url(#ember-wave-soft)" />
+        <path d={WAVE_PATH} fill="none" stroke="rgb(255, 150, 60)" strokeOpacity="0.36" strokeWidth="7" filter="url(#ember-wave-hot)" />
       </svg>
     </div>
   );
 }
+
+// Clipped to the letters; the vertical padding (cancelled by the margin) keeps
+// the descenders of y and p inside the painted background.
+const TITLE_GLOW =
+  '-my-[0.12em] bg-[linear-gradient(100deg,#ffffff_0%,#fff3e8_38%,#ffc28c_72%,#ff8a3d_100%)] bg-clip-text py-[0.12em] text-transparent';
 
 function EmberBackdrop() {
   return (
@@ -93,6 +98,7 @@ function EmberBackdrop() {
 export default function Screen({
   title,
   hideTitle = false,
+  glowTitle = false,
   back = false,
   action,
   backdrop = false,
@@ -103,6 +109,8 @@ export default function Screen({
   // Keep the title for screen readers only (e.g. a detail page whose hero
   // already shows the name).
   hideTitle?: boolean;
+  // Warm white-to-ember gradient title, for screens with the ember glow.
+  glowTitle?: boolean;
   // Show a back chevron to this screen's parent (nested screens only).
   back?: boolean;
   // One round header action beside the avatar (e.g. "New booking").
@@ -136,7 +144,15 @@ export default function Screen({
               <ChevronLeft size={28} />
             </Link>
           ) : null}
-          <h1 className={hideTitle ? 'sr-only' : 'truncate text-[28px] font-bold leading-none tracking-tight text-white'}>{title}</h1>
+          <h1
+            className={
+              hideTitle
+                ? 'sr-only'
+                : `truncate text-[28px] font-bold leading-none tracking-tight ${glowTitle ? TITLE_GLOW : 'text-white'}`
+            }
+          >
+            {title}
+          </h1>
           {action ? <div className="ml-auto flex shrink-0 items-center pl-3">{action}</div> : null}
         </header>
         {/* Section tabs travel with their screen, so they slide in with it. */}

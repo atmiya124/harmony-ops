@@ -61,9 +61,9 @@ export default function HomeDashboard({ firstName }: { firstName: string }) {
   return (
     <div className="space-y-5">
       {/* Hero — the "Harmony Ops" title is in the shared screen header. */}
-      <section className="relative -mt-3">
+      <section className="relative -mt-3 pb-4">
         {/* Fills the empty right side of the hero, just above the glow. */}
-        <HeroLogo className="absolute right-0 top-10 w-[42%] max-w-[168px]" />
+        <HeroLogo className="absolute right-0 top-12 w-[32%] max-w-[128px]" />
         <div className="relative">
           <p className="text-[17px] text-white/75">
             {greeting()}
@@ -138,14 +138,15 @@ export default function HomeDashboard({ firstName }: { firstName: string }) {
         </button>
       </div>
 
-      <QuickAddSheet
-        open={quickAddOpen}
-        onClose={() => setQuickAddOpen(false)}
-        onExpense={() => {
-          setQuickAddOpen(false);
-          openNewExpense();
-        }}
-      />
+      {quickAddOpen ? (
+        <QuickAddSheet
+          onClose={() => setQuickAddOpen(false)}
+          onExpense={() => {
+            setQuickAddOpen(false);
+            openNewExpense();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -234,28 +235,24 @@ function Row({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
 }
 
 // A two-option chooser: most additions on the go are expenses, so that's first.
-// Always mounted (hidden and inert while closed) so a tap starts the slide-in
-// on the very next frame instead of waiting for a mount + animation frame.
-function QuickAddSheet({ open, onClose, onExpense }: { open: boolean; onClose: () => void; onExpense: () => void }) {
+// Rendered only while open, like the profile menu. The slide-up is a CSS
+// animation (see .quick-sheet-* in globals.css), which starts the moment the
+// sheet mounts, so nothing waits on an extra frame before it appears.
+function QuickAddSheet({ onClose, onExpense }: { onClose: () => void; onExpense: () => void }) {
   useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [onClose]);
 
   return (
-    <div inert={!open} aria-hidden={!open} className={`fixed inset-0 z-[60] flex items-end justify-center ${open ? '' : 'pointer-events-none'}`}>
-      <button type="button" aria-label="Close" tabIndex={-1} onClick={onClose} className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${open ? 'opacity-100' : 'opacity-0'}`} />
+    <div className="fixed inset-0 z-[60] flex items-end justify-center">
+      <button type="button" aria-label="Close" tabIndex={-1} onClick={onClose} className="quick-sheet-backdrop absolute inset-0 bg-black/60" />
       <div
         role="dialog"
-        // Only while open: globals.css pauses the Home glow whenever an
-        // aria-modal element is on the page, and this sheet stays mounted.
-        aria-modal={open ? true : undefined}
+        aria-modal="true"
         aria-label="Quick add"
-        className={`relative w-full max-w-[480px] rounded-t-[28px] border-t border-white/10 bg-[#0b1118] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform motion-reduce:transition-none ${
-          open ? 'translate-y-0' : 'translate-y-full'
-        }`}
+        className="quick-sheet-panel relative w-full max-w-[480px] rounded-t-[28px] border-t border-white/10 bg-[#0b1118] px-5 pb-[max(35px,env(safe-area-inset-bottom))] pt-3"
       >
         <div className="mx-auto h-1 w-10 rounded-full bg-white/15" />
         <div className="mb-3 mt-3 flex items-center justify-between">
