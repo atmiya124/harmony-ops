@@ -1,13 +1,11 @@
 'use client';
 
 import { ViewTransition } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import SectionTabs from '@/components/SectionTabs';
 import { parentOf } from './navDirection';
-import logoWhite from '@/logo-white.png';
 
 // Wraps each page so route changes animate like native iOS navigation: the
 // leaving screen exits as "screen-out" and the arriving one enters as
@@ -73,7 +71,6 @@ function EmberBackdrop() {
 export default function Screen({
   title,
   hideTitle = false,
-  logo = false,
   back = false,
   action,
   backdrop = false,
@@ -84,8 +81,6 @@ export default function Screen({
   // Keep the title for screen readers only (e.g. a detail page whose hero
   // already shows the name).
   hideTitle?: boolean;
-  // Show the Harmony logo above the title (Home).
-  logo?: boolean;
   // Show a back chevron to this screen's parent (nested screens only).
   back?: boolean;
   // One round header action beside the avatar (e.g. "New booking").
@@ -113,7 +108,6 @@ export default function Screen({
         ) : backdrop ? (
           <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[420px]" style={SLATE_BACKDROP} />
         ) : null}
-        {logo ? <Image src={logoWhite} alt="" loading="eager" className="relative mb-2 h-10 w-auto" /> : null}
         <header className="relative mb-4 flex h-11 items-center pr-14">
           {back ? (
             <Link href={parentOf(pathname)} aria-label="Back" className="-ml-2 mr-0.5 flex size-10 shrink-0 items-center justify-center text-white">

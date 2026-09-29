@@ -242,6 +242,37 @@ body:has([aria-modal='true']) :is(.ember-core, .ember-band, .ember-warmth) {
   }
 }
 
+/* Home's HP mark (HeroLogo): drifts gently with the glow, and a highlight
+   sweeps across it once every 8s, then rests. */
+.hero-logo-float {
+  animation: hero-logo-float 11s ease-in-out infinite alternate;
+}
+.hero-logo-shine {
+  animation: hero-logo-shine 8s cubic-bezier(0.45, 0, 0.25, 1) 1.2s infinite;
+  transform: translateX(0);
+}
+body:has([aria-modal='true']) :is(.hero-logo-float, .hero-logo-shine) {
+  animation-play-state: paused;
+}
+@keyframes hero-logo-float {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  100% {
+    transform: translate3d(-4px, 5px, 0) rotate(-1.5deg);
+  }
+}
+@keyframes hero-logo-shine {
+  0% {
+    transform: translateX(0);
+  }
+  /* Sweep across (viewBox units: the mark is ~504 wide, plus the skew). */
+  28%,
+  100% {
+    transform: translateX(760px);
+  }
+}
+
 /* Reduced motion: no sliding; screens just swap; the ember glow holds still. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
@@ -252,6 +283,8 @@ body:has([aria-modal='true']) :is(.ember-core, .ember-band, .ember-warmth) {
   .ember-core,
   .ember-band,
   .ember-warmth,
+  .hero-logo-float,
+  .hero-logo-shine,
   .amount-caret {
     animation: none;
   }

@@ -13,6 +13,7 @@ import { buildReminderMailto, getPartnerSettings } from '@/lib/partnerApi';
 import type { Booking } from '@/lib/bookingTypes';
 import { todayLocal } from '@/lib/finance/dates';
 import CardGlow from '@/components/ui/CardGlow';
+import HeroLogo from './HeroLogo';
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -61,6 +62,8 @@ export default function HomeDashboard({ firstName }: { firstName: string }) {
     <div className="space-y-5">
       {/* Hero — the "Harmony Ops" title is in the shared screen header. */}
       <section className="relative -mt-3">
+        {/* Fills the empty right side of the hero, just above the glow. */}
+        <HeroLogo className="absolute right-0 top-3 w-[42%] max-w-[168px]" />
         <div className="relative">
           <p className="text-[17px] text-white/75">
             {greeting()}
