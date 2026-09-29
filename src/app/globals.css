@@ -208,11 +208,6 @@ html[data-nav='none']::view-transition-new(.screen-in) {
   animation-name: ember-warmth;
   animation-duration: 17s;
 }
-/* Hold the glow still while a sheet is open, so the phone's GPU is free for
-   the sheet itself. */
-body:has([aria-modal='true']) :is(.ember-core, .ember-warmth, .ember-wave-swell, .ember-wave-roll) {
-  animation-play-state: paused;
-}
 @keyframes ember-core {
   0% {
     transform: translate3d(0, 0, 0) scale(1);
@@ -282,16 +277,19 @@ body:has([aria-modal='true']) :is(.ember-core, .ember-warmth, .ember-wave-swell,
 }
 
 /* Home's HP mark (HeroLogo): drifts gently with the glow, and a highlight
-   sweeps across it once every 8s, then rests. */
+   sweeps across it twice after the screen opens, then stops. The sweep moves
+   an element inside the SVG, which phones repaint on the main thread every
+   frame, so it must not loop forever or taps on Home start to lag.
+   Nothing here (or in the ember glow) pauses while a sheet is open: flipping
+   every animation at the moment of the tap made Home's sheets open ~1s late
+   on phones. */
 .hero-logo-float {
+  will-change: transform;
   animation: hero-logo-float 11s ease-in-out infinite alternate;
 }
 .hero-logo-shine {
-  animation: hero-logo-shine 8s cubic-bezier(0.45, 0, 0.25, 1) 1.2s infinite;
+  animation: hero-logo-shine 8s cubic-bezier(0.45, 0, 0.25, 1) 1.2s 2 forwards;
   transform: translateX(0);
-}
-body:has([aria-modal='true']) :is(.hero-logo-float, .hero-logo-shine) {
-  animation-play-state: paused;
 }
 @keyframes hero-logo-float {
   0% {

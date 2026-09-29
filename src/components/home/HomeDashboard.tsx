@@ -125,7 +125,7 @@ export default function HomeDashboard({ firstName }: { firstName: string }) {
           tap away, however far the page is scrolled. The spacer keeps the
           last card from ending up underneath it. */}
       <div aria-hidden className="h-14" />
-      <div className="pointer-events-none fixed inset-x-0 bottom-[86px] z-40 flex justify-center px-4">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[100px] z-40 flex justify-center px-4">
         <button
           type="button"
           onClick={() => setQuickAddOpen(true)}
