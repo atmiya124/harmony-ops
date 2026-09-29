@@ -8,7 +8,7 @@ export default async function HomePage() {
   const partner = await getCurrentPartner();
   const firstName = partner?.name.split(' ')[0] || '';
   return (
-    <Screen title="Harmony Ops" backdrop="ember">
+    <Screen title="Harmony Ops" logo backdrop="ember">
       <HomeDashboard firstName={firstName} />
     </Screen>
   );
