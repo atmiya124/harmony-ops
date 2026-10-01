@@ -5,6 +5,7 @@ import { AlertTriangle, Banknote, Building2, Camera, ChevronDown, CreditCard, Fi
 import { CATEGORY_META } from './categoryMeta';
 import ReimbursementPanel from './ReimbursementPanel';
 import AmountKeypad from './AmountKeypad';
+import { partnerLabel } from './partnerLabel';
 import DateChip from '@/components/ui/DateChip';
 import { colorAlpha } from '@/lib/colorAlpha';
 import {
@@ -60,12 +61,6 @@ type ReceiptState =
   | { status: 'working'; previewUrl: string | null; isPdf: boolean }
   | { status: 'ready'; attachmentId: string; previewUrl: string | null; isPdf: boolean; duplicateOfExpenseId: string | null }
   | { status: 'error'; message: string };
-
-function partnerLabel(p: { email: string; name: string | null }): string {
-  if (p.name) return p.name.split(' ')[0];
-  const local = p.email.split('@')[0];
-  return local.charAt(0).toUpperCase() + local.slice(1);
-}
 
 function initials(p: { email: string; name: string | null }): string {
   if (!p.name) return p.email.charAt(0).toUpperCase() || '?';

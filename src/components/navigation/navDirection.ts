@@ -5,6 +5,9 @@ export function screenLevel(pathname: string): number {
   if (pathname === '/') return 0;
   if (/^\/events\/bookings\/[^/]+\/edit\/?$/.test(pathname)) return 3;
   if (/^\/events\/bookings\/[^/]+\/?$/.test(pathname)) return 2; // a booking, or /new
+  // An expense (opened from Finances or a booking), and its edit sheet,
+  // which opens over the same screen.
+  if (/^\/expenses\/[^/]+(\/edit)?\/?$/.test(pathname)) return 3;
   return 1; // Bookings, Today, Finances, the calculators
 }
 
@@ -14,6 +17,9 @@ export function parentOf(pathname: string): string {
   const edit = pathname.match(/^(\/events\/bookings\/[^/]+)\/edit\/?$/);
   if (edit) return edit[1];
   if (/^\/events\/bookings\/[^/]+\/?$/.test(pathname)) return '/events/bookings';
+  const expenseEdit = pathname.match(/^(\/expenses\/[^/]+)\/edit\/?$/);
+  if (expenseEdit) return expenseEdit[1];
+  if (/^\/expenses\/[^/]+\/?$/.test(pathname)) return '/finances';
   return '/';
 }
 

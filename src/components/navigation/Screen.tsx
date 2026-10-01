@@ -99,6 +99,7 @@ export default function Screen({
   title,
   hideTitle = false,
   glowTitle = false,
+  compactTitle = false,
   back = false,
   action,
   backdrop = false,
@@ -111,6 +112,8 @@ export default function Screen({
   hideTitle?: boolean;
   // Warm white-to-ember gradient title, for screens with the ember glow.
   glowTitle?: boolean;
+  // A smaller title, for a long one sharing the row with back + an action.
+  compactTitle?: boolean;
   // Show a back chevron to this screen's parent (nested screens only).
   back?: boolean;
   // One round header action beside the avatar (e.g. "New booking").
@@ -148,7 +151,7 @@ export default function Screen({
             className={
               hideTitle
                 ? 'sr-only'
-                : `truncate text-[28px] font-bold leading-none tracking-tight ${glowTitle ? TITLE_GLOW : 'text-white'}`
+                : `truncate ${compactTitle ? 'text-[20px] font-semibold' : 'text-[28px] font-bold'} leading-none tracking-tight ${glowTitle ? TITLE_GLOW : 'text-white'}`
             }
           >
             {title}

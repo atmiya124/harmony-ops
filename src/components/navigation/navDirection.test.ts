@@ -31,6 +31,18 @@ test('back chevron goes one level up', () => {
   assert.equal(directionBetween('/events/bookings/12/edit', parentOf('/events/bookings/12/edit')), 'back');
 });
 
+test('expense details sit under Finances; editing stays on the same screen', () => {
+  const id = '5f0c7c1e-2d3b-4a8e-9f10-1234567890ab';
+  assert.equal(screenLevel(`/expenses/${id}`), 3);
+  assert.equal(screenLevel(`/expenses/${id}/edit`), 3);
+  assert.equal(parentOf(`/expenses/${id}`), '/finances');
+  assert.equal(parentOf(`/expenses/${id}/edit`), `/expenses/${id}`);
+  assert.equal(directionBetween('/finances', `/expenses/${id}`), 'forward');
+  assert.equal(directionBetween(`/expenses/${id}`, '/finances'), 'back');
+  assert.equal(directionBetween('/events/bookings/12', `/expenses/${id}`), 'forward');
+  assert.equal(directionBetween(`/expenses/${id}`, `/expenses/${id}/edit`), 'fade');
+});
+
 test('siblings crossfade', () => {
   assert.equal(directionBetween('/calculator', '/calculator/stage'), 'fade');
   assert.equal(directionBetween('/events/bookings', '/events/today'), 'fade');

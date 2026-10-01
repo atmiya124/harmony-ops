@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { ChevronRight, Paperclip, Receipt } from 'lucide-react';
 import { CATEGORY_META } from './categoryMeta';
 import { useExpenseEntry } from './ExpenseEntryProvider';
@@ -10,8 +11,9 @@ import { formatCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 import { REIMBURSEMENT_STATUS_LABELS } from '@/lib/finance/types';
 
-// Expense rows (icon · category · date · event · amount) that open the edit
-// sheet when tapped. Re-fetches whenever an expense changes anywhere.
+// Expense rows (icon · category · date · event · amount) that open the
+// expense's details when tapped. Re-fetches whenever an expense changes
+// anywhere.
 export default function ExpenseList({
   filter,
   limit,
@@ -23,7 +25,7 @@ export default function ExpenseList({
   emptyText?: string;
   showEvent?: boolean;
 }) {
-  const { version, openEditExpense } = useExpenseEntry();
+  const { version } = useExpenseEntry();
   const query: ExpenseListFilter = { ...filter, limit };
   const { data, error } = useCachedData(expensesKey(query), () => listExpenses(query), version);
   const expenses = data ?? null;
@@ -57,7 +59,7 @@ export default function ExpenseList({
         const owed = e.reimbursement.status === 'pending' || e.reimbursement.status === 'partial';
         return (
           <li key={e.id}>
-            <button type="button" onClick={() => openEditExpense(e.id)} className="flex w-full items-center gap-3 py-3 text-left">
+            <Link href={`/expenses/${e.id}`} className="flex w-full items-center gap-3 py-3 text-left">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: colorAlpha(meta.color, 16) }}>
                 <Icon size={19} style={{ color: meta.color }} />
               </span>
@@ -74,7 +76,7 @@ export default function ExpenseList({
               </span>
               <span className="shrink-0 text-[15px] font-bold tabular-nums text-white">{formatCents(e.amountCents)}</span>
               <ChevronRight size={16} className="shrink-0 text-white/30" />
-            </button>
+            </Link>
           </li>
         );
       })}

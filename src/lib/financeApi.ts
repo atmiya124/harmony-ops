@@ -46,6 +46,8 @@ export interface PartnerOption extends PartnerInfo {
 // shows totals that are known to be out of date.
 export const FINANCE_PARTNERS_KEY = 'finance-partners';
 export const expensesKey = (filter: ExpenseListFilter = {}) => `expenses:${JSON.stringify(filter)}`;
+// Under the same prefix, so it's cleared along with the lists.
+export const expenseKey = (id: string) => `expenses:detail:${id}`;
 
 function changed<T>(result: Promise<T>): Promise<T> {
   return result.then((value) => {

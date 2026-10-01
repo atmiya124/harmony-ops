@@ -99,7 +99,9 @@ export interface ExpenseDto {
   fundingSource: ExpenseRow['fundingSource'];
   reimbursable: boolean;
   reimbursement: ReimbursementState;
-  receipt: { id: string; contentType: string; sizeBytes: number } | null;
+  // `filename` is the name it was uploaded with (photos are re-encoded and
+  // uploaded as receipt.jpg); `uploadedAt` is when the file was stored.
+  receipt: { id: string; contentType: string; sizeBytes: number; filename: string | null; uploadedAt: string } | null;
   notes: string | null;
   createdByEmail: string;
   updatedByEmail: string;
@@ -166,7 +168,13 @@ async function hydrate(rows: ExpenseRow[], reader: Tx | typeof db = db): Promise
       : Promise.resolve([]),
     attachmentIds.length
       ? reader
-          .select({ id: attachments.id, contentType: attachments.contentType, sizeBytes: attachments.sizeBytes })
+          .select({
+            id: attachments.id,
+            contentType: attachments.contentType,
+            sizeBytes: attachments.sizeBytes,
+            filename: attachments.originalFilename,
+            uploadedAt: attachments.createdAt,
+          })
           .from(attachments)
           .where(and(inArray(attachments.id, attachmentIds), isNull(attachments.deletedAt)))
       : Promise.resolve([]),
