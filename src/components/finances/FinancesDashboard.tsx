@@ -14,7 +14,7 @@ import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import ErrorState from '@/components/ui/ErrorState';
 import { DASHBOARD_EXPENSES_FILTER, expensesKey, FINANCE_PARTNERS_KEY, getPartners, listExpenses } from '@/lib/financeApi';
 import { useCachedData } from '@/hooks/useCachedData';
-import { accumulate, bucketize, currentPeriod, DATE_RANGES, inPeriod, previousPeriod, type DateRangeKey } from '@/lib/dateRanges';
+import { accumulate, bucketize, comparedTo, currentPeriod, inPeriod, isMonthRange, monthsSince, previousPeriod, type DateRange } from '@/lib/dateRanges';
 import { formatCents, formatCentsWhole, percentChange } from '@/lib/money';
 import { todayLocal } from '@/lib/finance/dates';
 import { EXPENSE_CATEGORIES } from '@/lib/finance/types';
@@ -25,7 +25,9 @@ import { EXPENSE_CATEGORIES } from '@/lib/finance/types';
 // against expenses, never extra spending, so they don't change any total.
 export default function FinancesDashboard() {
   const { version, openNewExpense } = useExpenseEntry();
-  const [range, setRange] = useState<DateRangeKey>('1M');
+  const [range, setRange] = useState<DateRange>(() => ({ month: todayLocal().slice(0, 7) }));
+  // The month the picker shows, kept while a preset (3M, YTD…) is active.
+  const [month, setMonth] = useState(() => todayLocal().slice(0, 7));
   const [showAll, setShowAll] = useState(false);
   const today = todayLocal();
 
@@ -68,12 +70,24 @@ export default function FinancesDashboard() {
   }, [expenses, range, today]);
 
   const owedPartners = partners.filter((p) => p.outstandingCents > 0).sort((a, b) => b.outstandingCents - a.outstandingCents);
-  const rangeInfo = DATE_RANGES.find((r) => r.key === range)!;
+  const rangeComparedTo = comparedTo(range, today);
+  // From the first recorded expense up to this month.
+  const earliest = expenses?.reduce((min, e) => (e.expenseDate < min ? e.expenseDate : min), today) ?? today;
+  const months = monthsSince(earliest, today);
   const monthCaption = new Date(`${today}T00:00:00`).toLocaleDateString('en-CA', { month: 'short', year: 'numeric' });
 
   return (
     <div className="space-y-4">
-      <RangeTabs value={range} onChange={setRange} />
+      <RangeTabs
+        value={range}
+        month={month}
+        months={months}
+        today={today}
+        onChange={(next) => {
+          setRange(next);
+          if (isMonthRange(next)) setMonth(next.month);
+        }}
+      />
 
       {error ? (
         <ErrorState message={error} />
@@ -91,7 +105,7 @@ export default function FinancesDashboard() {
             title="Total expenses"
             value={formatCentsWhole(view.total)}
             size="hero"
-            footer={rangeInfo.comparedTo ? <ChangeIndicator percent={view.change} comparedTo={rangeInfo.comparedTo} upIsGood={false} /> : null}
+            footer={rangeComparedTo ? <ChangeIndicator percent={view.change} comparedTo={rangeComparedTo} upIsGood={false} /> : null}
             aside={<ColumnTrend data={view.months} label="Expenses by month, last 12 months" height={72} caption={monthCaption} />}
           />
 

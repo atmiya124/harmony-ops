@@ -1,17 +1,27 @@
-// Date-range presets for financial screens. All dates are local calendar
-// dates as 'YYYY-MM-DD' strings (how expense dates are stored), so there is
-// no timezone drift between "today" on a phone and the stored dates.
+// Date ranges for financial screens: a calendar month (picked from a list)
+// or a rolling preset. All dates are local calendar dates as 'YYYY-MM-DD'
+// strings (how expense dates are stored), so there is no timezone drift
+// between "today" on a phone and the stored dates.
 
-export type DateRangeKey = '1W' | '1M' | '3M' | 'YTD' | '1Y' | 'ALL';
+export type PresetRangeKey = '3M' | 'YTD' | '1Y' | 'ALL';
 
-export const DATE_RANGES: { key: DateRangeKey; short: string; label: string; comparedTo: string | null }[] = [
-  { key: '1W', short: '1W', label: 'Last 7 days', comparedTo: 'previous 7 days' },
-  { key: '1M', short: '1M', label: 'This month', comparedTo: 'last month' },
+// A single calendar month, as 'YYYY-MM'.
+export interface MonthRange {
+  month: string;
+}
+
+export type DateRange = PresetRangeKey | MonthRange;
+
+export const DATE_RANGES: { key: PresetRangeKey; short: string; label: string; comparedTo: string | null }[] = [
   { key: '3M', short: '3M', label: 'Last 3 months', comparedTo: 'previous 3 months' },
   { key: 'YTD', short: 'YTD', label: 'Year to date', comparedTo: 'same period last year' },
   { key: '1Y', short: '1Y', label: 'Last 12 months', comparedTo: 'previous 12 months' },
   { key: 'ALL', short: 'ALL', label: 'All time', comparedTo: null },
 ];
+
+export function isMonthRange(range: DateRange): range is MonthRange {
+  return typeof range === 'object';
+}
 
 export interface Period {
   start: string | null; // inclusive; null = beginning of time
@@ -43,12 +53,18 @@ function addMonths(iso: string, months: number): string {
   return toIsoDate(target);
 }
 
-export function currentPeriod(range: DateRangeKey, today: string): Period {
+function lastDayOfMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  return toIsoDate(new Date(y, m, 0));
+}
+
+export function currentPeriod(range: DateRange, today: string): Period {
+  if (isMonthRange(range)) {
+    // The current month runs to today; a past month is the whole month.
+    const monthEnd = lastDayOfMonth(range.month);
+    return { start: `${range.month}-01`, end: monthEnd < today ? monthEnd : today };
+  }
   switch (range) {
-    case '1W':
-      return { start: addDays(today, -6), end: today };
-    case '1M':
-      return { start: `${today.slice(0, 7)}-01`, end: today };
     case '3M':
       return { start: addDays(addMonths(today, -3), 1), end: today };
     case 'YTD':
@@ -61,15 +77,16 @@ export function currentPeriod(range: DateRangeKey, today: string): Period {
 }
 
 // The like-for-like period to compare against: month-to-date is compared
-// with the same days of last month, not all of last month.
-export function previousPeriod(range: DateRangeKey, today: string): Period | null {
+// with the same days of last month, a whole past month with the whole
+// month before it.
+export function previousPeriod(range: DateRange, today: string): Period | null {
+  if (isMonthRange(range)) {
+    const { start, end } = currentPeriod(range, today);
+    const previousStart = addMonths(start!, -1);
+    const wholeMonth = end === lastDayOfMonth(range.month);
+    return { start: previousStart, end: wholeMonth ? lastDayOfMonth(previousStart.slice(0, 7)) : addMonths(end, -1) };
+  }
   switch (range) {
-    case '1W':
-      return { start: addDays(today, -13), end: addDays(today, -7) };
-    case '1M': {
-      const end = addMonths(today, -1);
-      return { start: `${end.slice(0, 7)}-01`, end };
-    }
     case '3M':
       return { start: addDays(addMonths(today, -6), 1), end: addMonths(today, -3) };
     case 'YTD': {
@@ -83,6 +100,27 @@ export function previousPeriod(range: DateRangeKey, today: string): Period | nul
   }
 }
 
+// What the change indicator compares against ("vs …").
+export function comparedTo(range: DateRange, today: string): string | null {
+  if (!isMonthRange(range)) return DATE_RANGES.find((r) => r.key === range)!.comparedTo;
+  if (range.month === today.slice(0, 7)) return 'same days last month';
+  return MONTH_LONG.format(parse(previousPeriod(range, today)!.start!));
+}
+
+// Every month from the earliest date up to today's month, newest first —
+// the choices in the month picker.
+export function monthsSince(earliest: string, today: string): string[] {
+  const out: string[] = [];
+  const first = earliest.slice(0, 7);
+  for (let m = `${today.slice(0, 7)}-01`; m.slice(0, 7) >= first; m = addMonths(m, -1)) out.push(m.slice(0, 7));
+  return out;
+}
+
+// "Sep" this year, "Sep 2025" otherwise.
+export function monthLabel(month: string, today: string): string {
+  return (month.slice(0, 4) === today.slice(0, 4) ? MONTH_SHORT_US : MONTH_YEAR_US).format(parse(`${month}-01`));
+}
+
 export function inPeriod(date: string, period: Period): boolean {
   return (period.start === null || date >= period.start) && date <= period.end;
 }
@@ -90,16 +128,20 @@ export function inPeriod(date: string, period: Period): boolean {
 const MONTH = new Intl.DateTimeFormat('en-CA', { month: 'short' });
 const MONTH_YEAR = new Intl.DateTimeFormat('en-CA', { month: 'short', year: 'numeric' });
 const DAY = new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric' });
+const MONTH_LONG = new Intl.DateTimeFormat('en-US', { month: 'long' });
+// en-US: "Sep", where en-CA can give "Sept."
+const MONTH_SHORT_US = new Intl.DateTimeFormat('en-US', { month: 'short' });
+const MONTH_YEAR_US = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' });
 
-// Splits amounts into chart points for a range: days for 1W/1M, weeks for
+// Splits amounts into chart points for a range: days for a month, weeks for
 // 3M, months for YTD/1Y/ALL. Empty buckets are kept as 0 so the x-axis is
 // continuous time, not just the days something happened.
-export function bucketize(entries: { date: string; cents: number }[], range: DateRangeKey, today: string): { label: string; value: number }[] {
+export function bucketize(entries: { date: string; cents: number }[], range: DateRange, today: string): { label: string; value: number }[] {
   const period = currentPeriod(range, today);
   const inRange = entries.filter((e) => inPeriod(e.date, period));
   const start = period.start ?? inRange.reduce((min, e) => (e.date < min ? e.date : min), today);
 
-  if (range === '1W' || range === '1M') {
+  if (isMonthRange(range)) {
     const out: { label: string; value: number }[] = [];
     for (let d = start; d <= period.end; d = addDays(d, 1)) {
       out.push({ label: DAY.format(parse(d)), value: sumWhere(inRange, (e) => e.date === d) });
