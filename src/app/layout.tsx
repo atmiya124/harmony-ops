@@ -27,7 +27,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   if (!partner && !isLoginPage) redirect(path && path !== '/' ? `${LOGIN_PATH}?next=${encodeURIComponent(path)}` : LOGIN_PATH);
 
   return (
-    <html lang="en" className={roboto.variable}>
+    // data-scroll-behavior: Next turns the CSS smooth scrolling off while it
+    // resets scroll on a route change, so a new screen opens at the top
+    // instead of animating there (and stopping part-way) during the push.
+    <html lang="en" className={roboto.variable} data-scroll-behavior="smooth">
       <body className="antialiased">
         <div className="relative mx-auto min-h-screen w-full max-w-[480px] overflow-hidden bg-[var(--bg)]">
           <div className="pointer-events-none absolute -left-24 -bottom-24 size-96 rounded-full bg-white opacity-[0.01] blur-[110px]" />

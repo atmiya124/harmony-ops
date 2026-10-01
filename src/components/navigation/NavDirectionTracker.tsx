@@ -56,6 +56,12 @@ function saveScroll(pathname: string) {
   }
 }
 
+// Instant, never animated: the CSS smooth scrolling would still be gliding
+// when the screen transition captures the page.
+function jumpTo(y: number) {
+  window.scrollTo({ top: y, behavior: 'instant' });
+}
+
 // Scrolls to `y` as soon as the page is tall enough (content that loads after
 // the screen appears), giving up after `timeoutMs`.
 function restoreScroll(y: number, timeoutMs = 1500) {
@@ -63,9 +69,9 @@ function restoreScroll(y: number, timeoutMs = 1500) {
   const started = performance.now();
   const attempt = () => {
     const maxY = document.documentElement.scrollHeight - window.innerHeight;
-    if (maxY >= y - 2) window.scrollTo(0, y);
+    if (maxY >= y - 2) jumpTo(y);
     else if (performance.now() - started < timeoutMs) window.setTimeout(attempt, 50);
-    else window.scrollTo(0, Math.max(0, maxY));
+    else jumpTo(Math.max(0, maxY));
   };
   attempt();
 }
@@ -155,7 +161,7 @@ export default function NavDirectionTracker() {
         const next = await waitForScreen(to);
         if (target) {
           const maxY = document.documentElement.scrollHeight - window.innerHeight;
-          window.scrollTo(0, Math.min(target, Math.max(0, maxY)));
+          jumpTo(Math.min(target, Math.max(0, maxY)));
         }
         tag(next, 'nav-new-screen', 'screen-in');
       });
