@@ -1,14 +1,15 @@
 'use client';
 
-import { useRef } from 'react';
 import { Calendar } from 'lucide-react';
 
 // A compact date "chip" that opens the browser's native date picker when
-// tapped or clicked anywhere on it. The native <input type="date"> stays in
-// the DOM (invisible, positioned over the chip so the picker anchors here),
-// but opening is done explicitly with showPicker(): desktop browsers only
-// open the picker from the input's own calendar icon, not from a click on
-// the rest of the field.
+// tapped or clicked anywhere on it. The native <input type="date"> is laid
+// invisibly over the whole chip and receives the tap itself:
+//   - Phones open their picker for a direct tap on a date input. (iOS Safari
+//     ignores showPicker() on date inputs without throwing, so the input
+//     must never be pointer-events: none.)
+//   - Desktop browsers only open it from the input's own calendar icon, so
+//     a mouse/trackpad click also calls showPicker().
 export default function DateChip({
   value,
   label,
@@ -26,30 +27,13 @@ export default function DateChip({
   ariaLabel: string;
   className?: string;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  function open() {
-    const input = inputRef.current;
-    if (!input) return;
-    try {
-      input.showPicker();
-    } catch {
-      // Older browsers without showPicker(): focusing/clicking the native
-      // input is the best available fallback.
-      input.focus();
-      input.click();
-    }
-  }
-
   return (
-    <div className="relative">
-      {/* The whole chip (padding included) is the click target. */}
-      <button type="button" onClick={open} aria-label={`${ariaLabel}: ${label}. Change date`} className={`flex w-full items-center gap-2.5 text-left ${className}`}>
+    <div className="relative rounded-2xl has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-white/40">
+      <span aria-hidden className={`flex w-full items-center gap-2.5 text-left ${className}`}>
         <Calendar size={16} className="shrink-0 text-white/45" />
         <span className="text-xs font-bold text-white">{label}</span>
-      </button>
+      </span>
       <input
-        ref={inputRef}
         type="date"
         value={value}
         min={min}
@@ -57,9 +41,17 @@ export default function DateChip({
         onChange={(e) => {
           if (e.target.value) onChange(e.target.value);
         }}
-        tabIndex={-1}
-        aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+        onClick={(e) => {
+          if (!window.matchMedia('(pointer: fine)').matches) return; // touch: native tap opens it
+          try {
+            e.currentTarget.showPicker();
+          } catch {
+            // Already open, or no showPicker(): the native click still applies.
+          }
+        }}
+        aria-label={`${ariaLabel}: ${label}. Change date`}
+        // 16px stops iOS zooming the page when the input takes focus.
+        className="absolute inset-0 h-full w-full cursor-pointer appearance-none text-[16px] opacity-0"
       />
     </div>
   );
