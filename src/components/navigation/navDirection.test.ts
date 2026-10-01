@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { directionBetween, parentOf, screenLevel } from './navDirection';
+import { directionBetween, parentOf, sameScreen, screenLevel } from './navDirection';
 
 test('screen depth', () => {
   assert.equal(screenLevel('/'), 0);
@@ -41,6 +41,14 @@ test('expense details sit under Finances; editing stays on the same screen', () 
   assert.equal(directionBetween(`/expenses/${id}`, '/finances'), 'back');
   assert.equal(directionBetween('/events/bookings/12', `/expenses/${id}`), 'forward');
   assert.equal(directionBetween(`/expenses/${id}`, `/expenses/${id}/edit`), 'fade');
+});
+
+test('an expense and its edit sheet are one screen', () => {
+  assert.equal(sameScreen('/expenses/a', '/expenses/a/edit'), true);
+  assert.equal(sameScreen('/expenses/a/edit', '/expenses/a'), true);
+  assert.equal(sameScreen('/expenses/a', '/expenses/b'), false);
+  assert.equal(sameScreen('/events/bookings', '/events/bookings/12'), false);
+  assert.equal(sameScreen('/events/bookings/12', '/events/bookings/12/edit'), false);
 });
 
 test('siblings crossfade', () => {

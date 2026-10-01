@@ -23,6 +23,14 @@ export function parentOf(pathname: string): string {
   return '/';
 }
 
+// Two paths drawn by the same mounted screen: an expense and its Edit sheet,
+// which opens over the details without moving them.
+export function sameScreen(a: string, b: string): boolean {
+  const expense = (p: string) => p.match(/^(\/expenses\/[^/]+)(\/edit)?\/?$/)?.[1];
+  const screen = expense(a);
+  return screen !== undefined && screen === expense(b);
+}
+
 export type NavDirection = 'forward' | 'back' | 'fade' | 'none';
 
 export function directionBetween(from: string, to: string): NavDirection {

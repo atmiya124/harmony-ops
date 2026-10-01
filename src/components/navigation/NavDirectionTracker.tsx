@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
-import { directionBetween, type NavDirection } from './navDirection';
+import { directionBetween, sameScreen, type NavDirection } from './navDirection';
 
 // Records which way the next navigation goes on <html data-nav="…">, so the
 // view-transition CSS in globals.css can play a push, a pop or a crossfade.
@@ -108,6 +108,9 @@ export default function NavDirectionTracker() {
   const pathname = usePathname();
   const current = useRef(pathname);
   const pendingRestore = useRef<number | null>(null);
+  // Set while a Back/Forward navigation is being rendered: those restore
+  // their own scroll position instead of starting at the top.
+  const popping = useRef(false);
 
   useEffect(() => {
     let replaying = false;
@@ -128,6 +131,7 @@ export default function NavDirectionTracker() {
       const from = current.current;
       const to = window.location.pathname;
       if (from === to) return;
+      popping.current = true;
       saveScroll(from);
       const target = readScroll()[to] ?? 0;
       const browserAnimated = (e as PopStateEvent & { hasUAVisualTransition?: boolean }).hasUAVisualTransition === true;
@@ -180,6 +184,16 @@ export default function NavDirectionTracker() {
       window.removeEventListener('popstate', onPopState, true);
     };
   }, []);
+
+  // Every other navigation (a tap, router.push) opens the new screen at the
+  // top. Next.js only resets scroll when it judges the new screen's top to
+  // be off-screen, which isn't reliable while content loads in behind a
+  // screen push. A layout effect, so it lands before the screen is shown.
+  useLayoutEffect(() => {
+    const from = current.current;
+    if (from !== pathname && !popping.current && !sameScreen(from, pathname)) jumpTo(0);
+    popping.current = false;
+  }, [pathname]);
 
   useEffect(() => {
     current.current = pathname;
