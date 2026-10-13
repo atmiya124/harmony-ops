@@ -4,6 +4,7 @@ import './globals.css';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import AppNav from '@/components/AppNav';
+import AppFrame from '@/components/navigation/AppFrame';
 import ProfileMenu from '@/components/auth/ProfileMenu';
 import ExpenseEntryProvider from '@/components/expenses/ExpenseEntryProvider';
 import NavDirectionTracker from '@/components/navigation/NavDirectionTracker';
@@ -32,7 +33,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     // instead of animating there (and stopping part-way) during the push.
     <html lang="en" className={roboto.variable} data-scroll-behavior="smooth">
       <body className="antialiased">
-        <div className="relative mx-auto min-h-screen w-full max-w-[480px] overflow-hidden bg-[var(--bg)]">
+        <AppFrame>
           <div className="pointer-events-none absolute -left-24 -bottom-24 size-96 rounded-full bg-white opacity-[0.01] blur-[110px]" />
           <div className="pointer-events-none absolute left-1/2 -top-48 size-96 -translate-x-1/2 rounded-full bg-white opacity-[0.01] blur-[110px]" />
           {partner && !isLoginPage ? (
@@ -50,7 +51,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           ) : (
             <main className="relative px-4 pb-16 pt-6">{children}</main>
           )}
-        </div>
+        </AppFrame>
       </body>
     </html>
   );

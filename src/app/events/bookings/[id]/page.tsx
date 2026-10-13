@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bell, Calendar, Check, ChevronRight, Clock, Mail, MapPin, Phone, Plus, Truck, type LucideIcon } from 'lucide-react';
+import { Bell, Calendar, Check, ChevronRight, Clock, FileText, Mail, MapPin, Phone, Plus, Truck, type LucideIcon } from 'lucide-react';
 import { Booking, BookingStatus, STATUSES } from '@/lib/bookingTypes';
 import { bookingKey, deleteBooking, getBooking, updateBooking } from '@/lib/bookingsApi';
 import { peekCache } from '@/lib/clientCache';
@@ -228,6 +228,14 @@ function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
       <div className="space-y-1 pt-2">
         <Link href={`/events/bookings/${id}/edit`} className="flex w-full items-center justify-center rounded-full bg-white py-3.5 text-[#0a0a0a]">
           <span className="text-[16px] font-semibold">Edit booking</span>
+        </Link>
+        {/* Starts a quote with this event and its client filled in. */}
+        <Link
+          href={`/quotes/new?event=${booking.id}`}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] py-3 text-white"
+        >
+          <FileText size={16} />
+          <span className="text-[15px] font-semibold">Create quote</span>
         </Link>
         {confirmingDelete ? (
           <div className="flex gap-2 pt-2">

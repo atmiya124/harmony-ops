@@ -51,6 +51,25 @@ test('an expense and its edit sheet are one screen', () => {
   assert.equal(sameScreen('/events/bookings/12', '/events/bookings/12/edit'), false);
 });
 
+test('quotes: list → details → edit, and back up the same way', () => {
+  const id = '5f0c7c1e-2d3b-4a8e-9f10-1234567890ab';
+  assert.equal(screenLevel('/quotes'), 1);
+  assert.equal(screenLevel('/invoices'), 1);
+  assert.equal(screenLevel('/quotes/new'), 2);
+  assert.equal(screenLevel(`/quotes/${id}`), 2);
+  assert.equal(screenLevel(`/quotes/${id}/edit`), 3);
+  assert.equal(parentOf('/quotes'), '/');
+  assert.equal(parentOf('/quotes/new'), '/quotes');
+  assert.equal(parentOf(`/quotes/${id}`), '/quotes');
+  assert.equal(parentOf(`/quotes/${id}/edit`), `/quotes/${id}`);
+  assert.equal(parentOf(`/invoices/${id}`), '/invoices');
+  assert.equal(directionBetween('/quotes', `/quotes/${id}`), 'forward');
+  assert.equal(directionBetween(`/quotes/${id}`, `/quotes/${id}/edit`), 'forward');
+  assert.equal(directionBetween(`/quotes/${id}/edit`, `/quotes/${id}`), 'back');
+  assert.equal(directionBetween('/quotes', '/invoices'), 'fade');
+  assert.equal(directionBetween('/finances', '/quotes'), 'fade');
+});
+
 test('siblings crossfade', () => {
   assert.equal(directionBetween('/calculator', '/calculator/stage'), 'fade');
   assert.equal(directionBetween('/events/bookings', '/events/today'), 'fade');

@@ -8,7 +8,9 @@ export function screenLevel(pathname: string): number {
   // An expense (opened from Finances or a booking), and its edit sheet,
   // which opens over the same screen.
   if (/^\/expenses\/[^/]+(\/edit)?\/?$/.test(pathname)) return 3;
-  return 1; // Bookings, Today, Finances, the calculators
+  if (/^\/quotes\/[^/]+\/edit\/?$/.test(pathname)) return 3;
+  if (/^\/(quotes|invoices)\/[^/]+\/?$/.test(pathname)) return 2; // a quote or invoice, or /quotes/new
+  return 1; // Bookings, Today, Finances, Quotes, Invoices, the calculators
 }
 
 // Where a screen's back chevron goes: one level up the app's hierarchy (not
@@ -20,6 +22,10 @@ export function parentOf(pathname: string): string {
   const expenseEdit = pathname.match(/^(\/expenses\/[^/]+)\/edit\/?$/);
   if (expenseEdit) return expenseEdit[1];
   if (/^\/expenses\/[^/]+\/?$/.test(pathname)) return '/finances';
+  const quoteEdit = pathname.match(/^(\/quotes\/[^/]+)\/edit\/?$/);
+  if (quoteEdit) return quoteEdit[1];
+  if (/^\/quotes\/[^/]+\/?$/.test(pathname)) return '/quotes';
+  if (/^\/invoices\/[^/]+\/?$/.test(pathname)) return '/invoices';
   return '/';
 }
 

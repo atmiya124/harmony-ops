@@ -1,0 +1,109 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { renderDocumentHtml } from './renderDocument';
+import { escapeHtml, Fragment, Html, jsx } from '@/lib/documents/html/jsx-runtime';
+import { invoiceDocument, quoteDocument } from '@/lib/documents/documentModel';
+import { invoiceFixture, quoteFixture, SAMPLE_CONFIG } from '@/lib/documents/testFixtures';
+import { DOCUMENT_CONFIG } from '@/lib/sales/documentConfig';
+
+test('html runtime: escapes text and attributes, maps JSX names, skips empty values', () => {
+  assert.equal(escapeHtml(`<a href="x">'&'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;');
+  const el = jsx('div', { className: 'a"b', title: '<x>', hidden: true, 'data-n': 3, skip: null, off: false, children: ['<b>', 1, null, false, new Html('<i>ok</i>')] });
+  assert.equal(String(el), '<div class="a&quot;b" title="&lt;x&gt;" hidden data-n="3">&lt;b&gt;1<i>ok</i></div>');
+  assert.equal(String(jsx('path', { strokeWidth: 1.3, fillRule: 'evenodd' })), '<path stroke-width="1.3" fill-rule="evenodd"></path>');
+  assert.equal(String(jsx('p', { style: { marginTop: 10, minWidth: 0, color: 'red' } })), '<p style="margin-top:10px;min-width:0;color:red"></p>');
+  const Comp = ({ name }: { name: string }) => jsx('b', { children: name });
+  assert.equal(String(jsx(Fragment, { children: [jsx(Comp, { name: 'x' }), 'y'] })), '<b>x</b>y');
+  assert.throws(() => jsx('img onerror=x', {}));
+  assert.throws(() => jsx('div', { 'onclick="x"': 1 }));
+});
+
+test('customer-entered text can never become markup in the PDF', () => {
+  const evil = '<script>alert(1)</script><img src=x onerror=alert(1)>';
+  const html = renderDocumentHtml(
+    quoteDocument(
+      quoteFixture({
+        items: [{ section: evil, itemName: evil, description: evil, quantity: 1, unitPriceCents: 100 }],
+        overrides: { customerName: evil, billingAddress: evil, notes: evil, terms: evil, eventName: evil },
+      }),
+      SAMPLE_CONFIG,
+    ),
+  );
+  assert.doesNotMatch(html, /<script>alert|<img src=x/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  // The only script is the layout script.
+  assert.equal(html.match(/<script>/g)?.length, 1);
+});
+
+test('the HTML is self-contained: no external URLs', () => {
+  const html = renderDocumentHtml(quoteDocument(quoteFixture(), SAMPLE_CONFIG));
+  assert.doesNotMatch(html, /(?:src|href)=["']?https?:/i);
+  assert.doesNotMatch(html, /url\((?!data:|#)/); // inline data, or an in-document SVG gradient
+  assert.match(html, /@font-face\{font-family:'Poppins'/);
+});
+
+test('quote HTML carries the reference structure', () => {
+  const html = renderDocumentHtml(quoteDocument(quoteFixture(), SAMPLE_CONFIG));
+  for (const text of [
+    '>Quote</h1>',
+    'EVENT PRODUCTION ESTIMATE',
+    'Quote prepared for:',
+    'Quote details:',
+    'Total estimate :',
+    'Item description',
+    'data-flow="section" data-section="LED Display"',
+    'Payment method: E-Transfer, VISA, MasterCard, Bank Transfer',
+    'Terms &amp; conditions',
+    'Quote acceptance',
+    'Customer approval:',
+    'I accept this quote, its pricing and the terms above.',
+    '<img class="logo" src="data:image/png;base64,', // the embedded Harmony logo
+    'alt="Harmony Production"',
+    'LED DISPLAY  |  SOUND  |  STAGE  |  LIGHTS', // footer
+    '$17,433.64',
+    '$2,005.64',
+    '−$812.00',
+  ]) {
+    assert.ok(html.includes(text), text);
+  }
+  assert.ok(!html.includes('Payment status'));
+});
+
+test('invoice HTML carries the reference structure', () => {
+  const html = renderDocumentHtml(invoiceDocument(invoiceFixture(), SAMPLE_CONFIG));
+  for (const text of ['>Invoice</h1>', 'EVENT PRODUCTION SERVICES', 'Bill to:', 'Invoice details:', 'Balance due :', 'How to pay', 'Reference: INV-000000218', 'Payment status', 'Unpaid balance', 'Invoice total']) {
+    assert.ok(html.includes(text), text);
+  }
+  assert.ok(!html.includes('Quote acceptance'));
+});
+
+// The printed markup only (not the stylesheet or layout script).
+const markup = (html: string) => html.replace(/<style>[\s\S]*?<\/style>|<script>[\s\S]*?<\/script>/g, '');
+
+test('without payment details the terms take its place beside the totals', () => {
+  const html = markup(renderDocumentHtml(quoteDocument(quoteFixture({ overrides: { showPaymentDetails: false } }), SAMPLE_CONFIG)));
+  assert.ok(!html.includes('Payment method:'));
+  assert.ok(!html.includes('pay-bar'));
+  assert.ok(html.includes('class="pay pay-none with-terms"'));
+  assert.ok(html.includes('<div class="pay-terms"><p class="q-title">Terms &amp; conditions</p>'));
+  assert.ok(!html.includes('data-flow="term"')); // no separate terms section
+  assert.ok(!html.includes('Please read before signing'));
+  assert.ok(html.includes('$17,433.64'));
+});
+
+test('with no terms and no payment details, questions sit beside the totals', () => {
+  const html = markup(renderDocumentHtml(quoteDocument(quoteFixture({ overrides: { showPaymentDetails: false, terms: null } }), SAMPLE_CONFIG)));
+  assert.ok(html.includes('class="pay pay-none"'));
+  assert.ok(html.includes('Questions about this quote?'));
+});
+
+test('terms are not numbered', () => {
+  const html = markup(renderDocumentHtml(quoteDocument(quoteFixture(), SAMPLE_CONFIG)));
+  assert.ok(html.includes('<p class="term" data-flow="term">A 50% non-refundable deposit'));
+  assert.doesNotMatch(html, />0[1-5]</);
+});
+
+test('unset company details leave no empty labels or placeholder text', () => {
+  const html = markup(renderDocumentHtml(quoteDocument(quoteFixture(), DOCUMENT_CONFIG)));
+  assert.doesNotMatch(html, /null|undefined|example\.com|<p><\/p>/);
+});

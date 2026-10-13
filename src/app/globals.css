@@ -347,3 +347,37 @@ html[data-nav='none']::view-transition-new(.screen-in) {
     animation: none;
   }
 }
+
+/* Quotes & Invoices: a light, paper-like theme close to the printed Harmony
+   Production documents — warm off-white page, white cards, hairline grey
+   borders, charcoal text and Harmony orange accents. Scoped to screens
+   rendered with <Screen tone="light">, so the rest of the app is unchanged. */
+.tone-light {
+  --bg: #f7f7f5;
+  --paper: #ffffff;
+  --paper-sunk: #f3f2ef;
+  --line: #e6e4df;
+  --line-strong: #d5d2cb;
+  --ink: #1f1f22;
+  --ink-2: #55555b;
+  --ink-3: #8b8b91;
+  --accent: #f0861e;
+  --accent-ink: #b85f07; /* orange text on white, readable */
+  --accent-soft: #fdf0e2;
+  --ok: #2d7a4c;
+  --ok-soft: #e9f4ee;
+  --bad: #b4342b;
+  --bad-soft: #fbedeb;
+  --info: #3d5a80;
+  --info-soft: #ecf1f7;
+  color: var(--ink);
+  color-scheme: light;
+}
+.tone-light ::selection {
+  background: var(--accent-soft);
+}
+/* The account button sits over these light screens too. */
+.tone-light [data-profile-button] {
+  border-color: transparent;
+  background: var(--ink);
+}

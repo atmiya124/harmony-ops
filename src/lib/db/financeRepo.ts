@@ -31,15 +31,15 @@ export class FinanceError extends Error {
   }
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-function nowIso(): string {
+export function nowIso(): string {
   return new Date().toISOString();
 }
 
 // updatedAt doubles as the optimistic-lock version, so it must change on
 // every write even if two land in the same millisecond.
-function nextTimestamp(previous: string): string {
+export function nextTimestamp(previous: string): string {
   const now = nowIso();
   return now > previous ? now : new Date(new Date(previous).getTime() + 1).toISOString();
 }

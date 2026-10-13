@@ -14,6 +14,16 @@ import {
   PAYMENT_METHODS,
   REIMBURSEMENT_METHODS,
 } from '../finance/types';
+import {
+  ADJUSTMENT_TYPES,
+  DOCUMENT_SEQUENCES,
+  INVOICE_STATUSES,
+  MAX_ITEM_QUANTITY,
+  MAX_PERCENT_BP,
+  QUOTE_STATUSES,
+  SALES_AUDIT_ACTIONS,
+  SALES_AUDIT_ENTITY_TYPES,
+} from '../sales/types';
 
 // These three tables and `users` already exist in this Turso database,
 // shared with another app (Event-booking-app) — this schema matches their
@@ -390,6 +400,299 @@ export const financeAuditLog = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Quotes & invoices (Phase 1). New tables, introduced by harmony-ops.
+//
+// Same rules as the finance tables: integer cents, rates in basis points,
+// stable snake_case enum keys, and no foreign key into the shared
+// `bookings` table (`event_id` is checked by the app). A quote or invoice
+// keeps its own snapshot of the customer and event, so later edits to a
+// booking never rewrite a document that was already sent.
+//
+// Totals are stored for listing and reporting but are always recalculated
+// on the server by src/lib/quoteCalculator.ts; the CHECKs below make the
+// stored figures add up, so they can't drift from each other.
+//
+// The shared database only accepts new tables (see migrationGuard), so the
+// columns later phases need — sent/accepted timestamps, invoice payment
+// fields, soft delete — exist from the start.
+// ---------------------------------------------------------------------------
+
+const centsRange = (column: unknown) => sql`${column} >= 0 AND ${column} <= ${sql.raw(String(MAX_AMOUNT_CENTS))}`;
+const isoDate = (column: unknown) => sql`${column} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`;
+
+// Discount and deposit: `percent` values are basis points, `fixed` values
+// cents, `none` always 0.
+const adjustmentValid = (type: unknown, value: unknown) =>
+  sql`(${type} = 'none' AND ${value} = 0) OR (${type} = 'percent' AND ${value} >= 0 AND ${value} <= ${sql.raw(String(MAX_PERCENT_BP))}) OR (${type} = 'fixed' AND ${centsRange(value)})`;
+
+// Hands out quote and invoice numbers. Incremented with a single atomic
+// UPSERT inside the same transaction as the insert that uses the number, so
+// two partners saving at once can never be given the same one (and the
+// UNIQUE index on the number column is a second line of defense).
+export const documentSequences = sqliteTable(
+  'document_sequences',
+  {
+    name: text('name', { enum: DOCUMENT_SEQUENCES }).primaryKey(),
+    lastValue: integer('last_value').notNull(),
+  },
+  (t) => [check('document_sequences_name_valid', sql`${t.name} IN (${inList(DOCUMENT_SEQUENCES)})`), check('document_sequences_value_positive', sql`${t.lastValue} >= 0`)],
+);
+
+export const quotes = sqliteTable(
+  'quotes',
+  {
+    // Client-generated UUID, so a retried save can't create a second quote.
+    id: text('id').primaryKey(),
+    quoteNumber: text('quote_number').notNull(), // Q-000000001, server-assigned
+    status: text('status', { enum: QUOTE_STATUSES }).notNull().default('draft'),
+
+    // Customer snapshot.
+    customerName: text('customer_name').notNull(),
+    customerCompany: text('customer_company'),
+    customerEmail: text('customer_email'),
+    customerPhone: text('customer_phone'),
+    billingAddress: text('billing_address'),
+
+    // Optional link to a booking, plus a snapshot of its details.
+    eventId: integer('event_id'),
+    eventName: text('event_name'),
+    eventDate: text('event_date'), // YYYY-MM-DD; null = TBC
+    venueName: text('venue_name'),
+    venueAddress: text('venue_address'),
+
+    quoteDate: text('quote_date').notNull(), // YYYY-MM-DD
+    validUntil: text('valid_until').notNull(), // YYYY-MM-DD
+
+    currency: text('currency').notNull().default(CURRENCY),
+    subtotalCents: integer('subtotal_cents').notNull(),
+    discountType: text('discount_type', { enum: ADJUSTMENT_TYPES }).notNull().default('none'),
+    discountValue: integer('discount_value').notNull().default(0),
+    discountCents: integer('discount_cents').notNull().default(0),
+    // The rate and label the quote was priced with, so a later change to the
+    // default rate never rewrites an existing quote.
+    taxLabel: text('tax_label').notNull().default('HST'),
+    taxRateBp: integer('tax_rate_bp').notNull(),
+    taxCents: integer('tax_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    depositType: text('deposit_type', { enum: ADJUSTMENT_TYPES }).notNull().default('none'),
+    depositValue: integer('deposit_value').notNull().default(0),
+    depositRequiredCents: integer('deposit_required_cents').notNull().default(0),
+
+    notes: text('notes'),
+    terms: text('terms'),
+    // Whether the PDF prints the payment section (methods, e-transfer, card).
+    // Added in migration 0007.
+    showPaymentDetails: integer('show_payment_details', { mode: 'boolean' }).notNull().default(true),
+
+    // Lifecycle timestamps (ISO). Set by status changes; Phase 3's client
+    // link records the acceptance details in its own table.
+    statusChangedAt: text('status_changed_at'),
+    sentAt: text('sent_at'),
+    acceptedAt: text('accepted_at'),
+
+    createdByUserId: text('created_by_user_id').notNull(),
+    createdByEmail: text('created_by_email').notNull(),
+    updatedByEmail: text('updated_by_email').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(), // also the optimistic-lock version
+    deletedAt: text('deleted_at'),
+    deletedByEmail: text('deleted_by_email'),
+  },
+  (t) => [
+    uniqueIndex('quotes_quote_number_unique').on(t.quoteNumber),
+    index('quotes_event_id_idx').on(t.eventId),
+    index('quotes_status_idx').on(t.status),
+    check('quotes_status_valid', sql`${t.status} IN (${inList(QUOTE_STATUSES)})`),
+    check('quotes_number_format', sql`${t.quoteNumber} GLOB 'Q-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*'`),
+    check('quotes_quote_date_format', isoDate(t.quoteDate)),
+    check('quotes_valid_until_format', isoDate(t.validUntil)),
+    check('quotes_valid_until_after_quote_date', sql`${t.validUntil} >= ${t.quoteDate}`),
+    check('quotes_event_date_format', sql`${t.eventDate} IS NULL OR ${isoDate(t.eventDate)}`),
+    check('quotes_subtotal_range', centsRange(t.subtotalCents)),
+    check('quotes_discount_valid', adjustmentValid(t.discountType, t.discountValue)),
+    check('quotes_discount_within_subtotal', sql`${t.discountCents} >= 0 AND ${t.discountCents} <= ${t.subtotalCents}`),
+    check('quotes_tax_rate_range', sql`${t.taxRateBp} >= 0 AND ${t.taxRateBp} <= ${sql.raw(String(MAX_HST_RATE_BP))}`),
+    check('quotes_tax_non_negative', sql`${t.taxCents} >= 0`),
+    check('quotes_total_adds_up', sql`${t.totalCents} = ${t.subtotalCents} - ${t.discountCents} + ${t.taxCents}`),
+    check('quotes_deposit_valid', adjustmentValid(t.depositType, t.depositValue)),
+    check('quotes_deposit_within_total', sql`${t.depositRequiredCents} >= 0 AND ${t.depositRequiredCents} <= ${t.totalCents}`),
+  ],
+);
+
+// Line items, in display order. `section` is free text ("LED Display",
+// "Sound", or anything typed); consecutive items with the same section are
+// shown under one heading.
+export const quoteItems = sqliteTable(
+  'quote_items',
+  {
+    id: text('id').primaryKey(),
+    quoteId: text('quote_id')
+      .notNull()
+      .references(() => quotes.id, { onDelete: 'cascade' }),
+    section: text('section').notNull(),
+    itemName: text('item_name').notNull(),
+    description: text('description'),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    lineTotalCents: integer('line_total_cents').notNull(), // quantity × unit price, before the item's discount
+    // Optional discount on this line only (added in migration 0006). What the
+    // line contributes to the subtotal is line_total_cents - discount_cents.
+    discountType: text('discount_type', { enum: ADJUSTMENT_TYPES }).notNull().default('none'),
+    discountValue: integer('discount_value').notNull().default(0),
+    discountCents: integer('discount_cents').notNull().default(0),
+    sortOrder: integer('sort_order').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('quote_items_quote_order_unique').on(t.quoteId, t.sortOrder),
+    check('quote_items_quantity_range', sql`${t.quantity} >= 1 AND ${t.quantity} <= ${sql.raw(String(MAX_ITEM_QUANTITY))}`),
+    check('quote_items_unit_price_range', centsRange(t.unitPriceCents)),
+    check('quote_items_line_total', sql`${t.lineTotalCents} = ${t.quantity} * ${t.unitPriceCents}`),
+    check('quote_items_discount_type_valid', sql`${t.discountType} IN (${inList(ADJUSTMENT_TYPES)})`),
+    check('quote_items_discount_valid', adjustmentValid(t.discountType, t.discountValue)),
+    check('quote_items_discount_within_line', sql`${t.discountCents} >= 0 AND ${t.discountCents} <= ${t.lineTotalCents}`),
+  ],
+);
+
+// Invoices copy everything they need from the accepted quote (Phase 4)
+// rather than reading it, so the quote can't change an issued invoice.
+// `quote_id` is kept for traceability only; an invoice may also stand alone.
+export const invoices = sqliteTable(
+  'invoices',
+  {
+    id: text('id').primaryKey(),
+    invoiceNumber: text('invoice_number').notNull(), // INV-000000001, server-assigned
+    quoteId: text('quote_id').references(() => quotes.id),
+    status: text('status', { enum: INVOICE_STATUSES }).notNull().default('draft'),
+
+    customerName: text('customer_name').notNull(),
+    customerCompany: text('customer_company'),
+    customerEmail: text('customer_email'),
+    customerPhone: text('customer_phone'),
+    billingAddress: text('billing_address'),
+
+    eventId: integer('event_id'),
+    eventName: text('event_name'),
+    eventDate: text('event_date'),
+    venueName: text('venue_name'),
+    venueAddress: text('venue_address'),
+
+    invoiceDate: text('invoice_date').notNull(),
+    dueDate: text('due_date').notNull(),
+
+    currency: text('currency').notNull().default(CURRENCY),
+    subtotalCents: integer('subtotal_cents').notNull(),
+    discountType: text('discount_type', { enum: ADJUSTMENT_TYPES }).notNull().default('none'),
+    discountValue: integer('discount_value').notNull().default(0),
+    discountCents: integer('discount_cents').notNull().default(0),
+    taxLabel: text('tax_label').notNull().default('HST'),
+    taxRateBp: integer('tax_rate_bp').notNull(),
+    taxCents: integer('tax_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    // Payment position. Phase 5 records the individual payments in their own
+    // table and keeps these in step inside the same transaction.
+    depositPaidCents: integer('deposit_paid_cents').notNull().default(0),
+    amountPaidCents: integer('amount_paid_cents').notNull().default(0), // paid beyond the deposit
+    balanceDueCents: integer('balance_due_cents').notNull(),
+
+    notes: text('notes'),
+    terms: text('terms'),
+    showPaymentDetails: integer('show_payment_details', { mode: 'boolean' }).notNull().default(true), // migration 0007
+
+    statusChangedAt: text('status_changed_at'),
+    sentAt: text('sent_at'),
+    paidAt: text('paid_at'),
+    voidedAt: text('voided_at'),
+    voidReason: text('void_reason'),
+
+    createdByUserId: text('created_by_user_id').notNull(),
+    createdByEmail: text('created_by_email').notNull(),
+    updatedByEmail: text('updated_by_email').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at'),
+    deletedByEmail: text('deleted_by_email'),
+  },
+  (t) => [
+    uniqueIndex('invoices_invoice_number_unique').on(t.invoiceNumber),
+    index('invoices_quote_id_idx').on(t.quoteId),
+    index('invoices_event_id_idx').on(t.eventId),
+    index('invoices_status_idx').on(t.status),
+    check('invoices_status_valid', sql`${t.status} IN (${inList(INVOICE_STATUSES)})`),
+    check('invoices_number_format', sql`${t.invoiceNumber} GLOB 'INV-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*'`),
+    check('invoices_invoice_date_format', isoDate(t.invoiceDate)),
+    check('invoices_due_date_format', isoDate(t.dueDate)),
+    check('invoices_due_after_invoice_date', sql`${t.dueDate} >= ${t.invoiceDate}`),
+    check('invoices_event_date_format', sql`${t.eventDate} IS NULL OR ${isoDate(t.eventDate)}`),
+    check('invoices_subtotal_range', centsRange(t.subtotalCents)),
+    check('invoices_discount_valid', adjustmentValid(t.discountType, t.discountValue)),
+    check('invoices_discount_within_subtotal', sql`${t.discountCents} >= 0 AND ${t.discountCents} <= ${t.subtotalCents}`),
+    check('invoices_tax_rate_range', sql`${t.taxRateBp} >= 0 AND ${t.taxRateBp} <= ${sql.raw(String(MAX_HST_RATE_BP))}`),
+    check('invoices_tax_non_negative', sql`${t.taxCents} >= 0`),
+    check('invoices_total_adds_up', sql`${t.totalCents} = ${t.subtotalCents} - ${t.discountCents} + ${t.taxCents}`),
+    check('invoices_payments_non_negative', sql`${t.depositPaidCents} >= 0 AND ${t.amountPaidCents} >= 0`),
+    check('invoices_balance_adds_up', sql`${t.balanceDueCents} = ${t.totalCents} - ${t.depositPaidCents} - ${t.amountPaidCents}`),
+    check('invoices_void_complete', sql`${t.voidedAt} IS NULL OR ${t.voidReason} IS NOT NULL`),
+  ],
+);
+
+export const invoiceItems = sqliteTable(
+  'invoice_items',
+  {
+    id: text('id').primaryKey(),
+    invoiceId: text('invoice_id')
+      .notNull()
+      .references(() => invoices.id, { onDelete: 'cascade' }),
+    section: text('section').notNull(),
+    itemName: text('item_name').notNull(),
+    description: text('description'),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    lineTotalCents: integer('line_total_cents').notNull(), // quantity × unit price, before the item's discount
+    // Optional discount on this line only (added in migration 0006). What the
+    // line contributes to the subtotal is line_total_cents - discount_cents.
+    discountType: text('discount_type', { enum: ADJUSTMENT_TYPES }).notNull().default('none'),
+    discountValue: integer('discount_value').notNull().default(0),
+    discountCents: integer('discount_cents').notNull().default(0),
+    sortOrder: integer('sort_order').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('invoice_items_invoice_order_unique').on(t.invoiceId, t.sortOrder),
+    check('invoice_items_quantity_range', sql`${t.quantity} >= 1 AND ${t.quantity} <= ${sql.raw(String(MAX_ITEM_QUANTITY))}`),
+    check('invoice_items_unit_price_range', centsRange(t.unitPriceCents)),
+    check('invoice_items_line_total', sql`${t.lineTotalCents} = ${t.quantity} * ${t.unitPriceCents}`),
+    check('invoice_items_discount_type_valid', sql`${t.discountType} IN (${inList(ADJUSTMENT_TYPES)})`),
+    check('invoice_items_discount_valid', adjustmentValid(t.discountType, t.discountValue)),
+    check('invoice_items_discount_within_line', sql`${t.discountCents} >= 0 AND ${t.discountCents} <= ${t.lineTotalCents}`),
+  ],
+);
+
+// Append-only history of quote and invoice changes, like finance_audit_log
+// (whose entity-type CHECK can't be widened on this shared database).
+export const salesAuditLog = sqliteTable(
+  'sales_audit_log',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    entityType: text('entity_type', { enum: SALES_AUDIT_ENTITY_TYPES }).notNull(),
+    entityId: text('entity_id').notNull(),
+    action: text('action', { enum: SALES_AUDIT_ACTIONS }).notNull(),
+    changedByUserId: text('changed_by_user_id').notNull(),
+    changedByEmail: text('changed_by_email').notNull(),
+    changedAt: text('changed_at').notNull(),
+    before: text('before'), // JSON snapshot (with line items); null on create
+    after: text('after'),
+  },
+  (t) => [
+    index('sales_audit_log_entity_idx').on(t.entityType, t.entityId),
+    check('sales_audit_log_entity_type_valid', sql`${t.entityType} IN (${inList(SALES_AUDIT_ENTITY_TYPES)})`),
+    check('sales_audit_log_action_valid', sql`${t.action} IN (${inList(SALES_AUDIT_ACTIONS)})`),
+  ],
+);
+
 export type BookingRow = typeof bookings.$inferSelect;
 export type NewBookingRow = typeof bookings.$inferInsert;
 export type BookingEquipmentRow = typeof bookingEquipment.$inferSelect;
@@ -409,3 +712,7 @@ export type EventFinancialsRow = typeof eventFinancials.$inferSelect;
 export type FinanceSettingsRow = typeof financeSettings.$inferSelect;
 export type FinanceAuditLogRow = typeof financeAuditLog.$inferSelect;
 export type ReimbursementRow = typeof reimbursements.$inferSelect;
+export type QuoteRow = typeof quotes.$inferSelect;
+export type QuoteItemRow = typeof quoteItems.$inferSelect;
+export type InvoiceRow = typeof invoices.$inferSelect;
+export type InvoiceItemRow = typeof invoiceItems.$inferSelect;

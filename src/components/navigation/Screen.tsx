@@ -34,6 +34,13 @@ const SECTION_TABS = {
       { label: 'Today', href: '/events/today' },
     ],
   },
+  sales: {
+    label: 'Sales',
+    tabs: [
+      { label: 'Quotes', href: '/quotes' },
+      { label: 'Invoices', href: '/invoices' },
+    ],
+  },
 } as const;
 
 const SLATE_BACKDROP: React.CSSProperties = {
@@ -104,6 +111,7 @@ export default function Screen({
   action,
   backdrop = false,
   section,
+  tone = 'dark',
   children,
 }: {
   title: string;
@@ -122,18 +130,23 @@ export default function Screen({
   // warm ember glow (Home).
   backdrop?: boolean | 'ember';
   section?: keyof typeof SECTION_TABS;
+  // 'light': the paper-like theme of the Quotes & Invoices module (tokens in
+  // globals.css under .tone-light), laid out wider on desktop.
+  tone?: 'dark' | 'light';
   children: React.ReactNode;
 }) {
   const tabs = section ? SECTION_TABS[section] : null;
   // data-screen lets NavDirectionTracker find this screen when it animates
   // browser Back/Forward itself.
   const pathname = usePathname();
+  const light = tone === 'light';
   return (
     <ViewTransition enter="screen-in" exit="screen-out" default="none">
       {/* An opaque, full-width, full-height surface (like a native screen)
           so the arriving screen covers the one underneath while they slide.
           The negative margins cancel <main>'s padding. */}
-      <div data-screen={pathname} className="relative -mx-4 -mt-4 min-h-dvh bg-[var(--bg)] px-4 pt-4">
+      <div data-screen={pathname} className={`relative -mx-4 -mt-4 min-h-dvh bg-[var(--bg)] px-4 pt-4 ${light ? 'tone-light md:px-8' : ''}`}>
+        <div className={light ? 'mx-auto w-full max-w-6xl' : undefined}>
         {/* Same height as the avatar (44px) and on the same row; the right
             padding keeps long titles clear of it. */}
         {backdrop === 'ember' ? (
@@ -143,7 +156,11 @@ export default function Screen({
         ) : null}
         <header className="relative mb-4 flex h-11 items-center pr-14">
           {back ? (
-            <Link href={parentOf(pathname)} aria-label="Back" className="-ml-2 mr-0.5 flex size-10 shrink-0 items-center justify-center text-white">
+            <Link
+              href={parentOf(pathname)}
+              aria-label="Back"
+              className={`-ml-2 mr-0.5 flex size-10 shrink-0 items-center justify-center ${light ? 'text-[var(--ink)]' : 'text-white'}`}
+            >
               <ChevronLeft size={28} />
             </Link>
           ) : null}
@@ -151,7 +168,7 @@ export default function Screen({
             className={
               hideTitle
                 ? 'sr-only'
-                : `truncate ${compactTitle ? 'text-[20px] font-semibold' : 'text-[28px] font-bold'} leading-none tracking-tight ${glowTitle ? TITLE_GLOW : 'text-white'}`
+                : `truncate ${compactTitle ? 'text-[20px] font-semibold' : 'text-[28px] font-bold'} leading-none tracking-tight ${glowTitle ? TITLE_GLOW : light ? 'text-[var(--ink)]' : 'text-white'}`
             }
           >
             {title}
@@ -159,9 +176,10 @@ export default function Screen({
           {action ? <div className="ml-auto flex shrink-0 items-center pl-3">{action}</div> : null}
         </header>
         {/* Section tabs travel with their screen, so they slide in with it. */}
-        {tabs ? <SectionTabs tabs={[...tabs.tabs]} label={tabs.label} /> : null}
+        {tabs ? <SectionTabs tabs={[...tabs.tabs]} label={tabs.label} tone={tone} /> : null}
         {/* Positioned so it paints above the (absolute) backdrop gradient. */}
         {backdrop ? <div className="relative">{children}</div> : children}
+        </div>
       </div>
     </ViewTransition>
   );

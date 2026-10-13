@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, Home as HomeIcon, Wallet } from 'lucide-react';
+import { CalendarDays, FileText, Home as HomeIcon, Wallet } from 'lucide-react';
 import { NavTab } from './navTypes';
 import { prefetchFinancesData } from '@/lib/financeApi';
 
@@ -12,16 +12,18 @@ type TabIcon = (props: { size?: number; className?: string }) => React.ReactNode
 const TABS: { key: NavTab; label: string; href: string; icon: TabIcon }[] = [
   { key: 'home', label: 'Home', href: '/', icon: HomeIcon },
   { key: 'bookings', label: 'Bookings', href: '/events/bookings', icon: CalendarDays },
+  { key: 'sales', label: 'Sales', href: '/quotes', icon: FileText },
   { key: 'finances', label: 'Finances', href: '/finances', icon: Wallet },
 ];
 
-// Tab geometry: each tab is w-24 (96px) with a 4px gap, so the sliding fill
-// moves in 100px steps.
-const TAB_STEP_PX = 100;
+// Tab geometry: each tab is 72px wide with a 4px gap, so the sliding fill
+// moves in 76px steps (four tabs fit a 360px-wide phone).
+const TAB_STEP_PX = 76;
 
 // The calculators are opened from Home, so they keep Home highlighted.
 function resolveTab(pathname: string): NavTab {
   if (pathname.startsWith('/events')) return 'bookings';
+  if (pathname.startsWith('/quotes') || pathname.startsWith('/invoices')) return 'sales';
   if (pathname.startsWith('/finances') || pathname.startsWith('/expenses/')) return 'finances';
   return 'home';
 }
@@ -67,7 +69,7 @@ export default function AppNav() {
               on Apple's springy ease-out. */}
           <span
             aria-hidden
-            className="absolute bottom-1.5 left-1.5 top-1.5 w-24 rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform motion-reduce:transition-none"
+            className="absolute bottom-1.5 left-1.5 top-1.5 w-[72px] rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform motion-reduce:transition-none"
             style={{ transform: `translateX(${activeIndex * TAB_STEP_PX}px)` }}
           />
           {TABS.map(({ key, label, href, icon: Icon }) => {
@@ -82,7 +84,7 @@ export default function AppNav() {
                 aria-current={isActive ? 'page' : undefined}
                 data-nav="fade"
                 onClick={() => setPending({ tab: key, from: pathname })}
-                className={`relative flex w-24 flex-col items-center justify-center gap-0.5 rounded-full py-2 transition-colors duration-300 ${
+                className={`relative flex w-[72px] flex-col items-center justify-center gap-0.5 rounded-full py-2 transition-colors duration-300 ${
                   isActive ? 'text-[#0a0a0a]' : 'text-white/60 hover:text-white/85'
                 }`}
               >

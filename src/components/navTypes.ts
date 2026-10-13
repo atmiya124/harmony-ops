@@ -1,1 +1,1 @@
-export type NavTab = 'home' | 'bookings' | 'finances';
+export type NavTab = 'home' | 'bookings' | 'sales' | 'finances';

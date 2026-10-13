@@ -35,6 +35,7 @@ export default function ProfileMenu({ partner }: { partner: Partner }) {
         onClick={() => setOpen((o) => !o)}
         aria-label="Profile menu"
         aria-expanded={open}
+        data-profile-button
         className="flex size-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.06] backdrop-blur-md"
       >
         <Avatar partner={partner} />
