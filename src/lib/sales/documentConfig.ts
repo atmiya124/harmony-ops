@@ -37,13 +37,11 @@ export interface DocumentConfig {
 export const DOCUMENT_CONFIG: DocumentConfig = {
   companyName: 'Harmony Production',
   services: ['LED DISPLAY', 'SOUND', 'STAGE', 'LIGHTS'],
-  // TODO(Harmony): add the business address, phone numbers, hours, email and
-  // website. Until then they're omitted from the PDFs.
-  addressLines: [],
-  phones: [],
+  addressLines: ['15 Cromarty Drive', 'Etobicoke, ON  M9W 2X5'],
+  phones: ['(416) 833-0534', '(647) 886-1091'],
   businessHours: null,
-  email: null,
-  website: null,
+  email: 'info@harmonyproduction.ca',
+  website: 'www.harmonyproduction.ca',
   payment: {
     methods: ['E-Transfer', 'VISA', 'MasterCard', 'Bank Transfer'],
     cards: ['Visa', 'MasterCard', 'American Express'],

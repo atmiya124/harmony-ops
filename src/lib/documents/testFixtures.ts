@@ -18,6 +18,17 @@ export const SAMPLE_CONFIG: DocumentConfig = {
   payment: { ...DOCUMENT_CONFIG.payment, etransferEmail: 'payments@example.com' },
 };
 
+// Every optional company detail unset: the PDF must simply leave them off.
+export const BLANK_CONFIG: DocumentConfig = {
+  ...DOCUMENT_CONFIG,
+  addressLines: [],
+  phones: [],
+  businessHours: null,
+  email: null,
+  website: null,
+  payment: { ...DOCUMENT_CONFIG.payment, etransferEmail: null, bank: null },
+};
+
 export interface FixtureItem {
   section: string;
   itemName: string;

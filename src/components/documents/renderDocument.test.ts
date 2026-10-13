@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { renderDocumentHtml } from './renderDocument';
 import { escapeHtml, Fragment, Html, jsx } from '@/lib/documents/html/jsx-runtime';
 import { invoiceDocument, quoteDocument } from '@/lib/documents/documentModel';
-import { invoiceFixture, quoteFixture, SAMPLE_CONFIG } from '@/lib/documents/testFixtures';
-import { DOCUMENT_CONFIG } from '@/lib/sales/documentConfig';
+import { BLANK_CONFIG, invoiceFixture, quoteFixture, SAMPLE_CONFIG } from '@/lib/documents/testFixtures';
 
 test('html runtime: escapes text and attributes, maps JSX names, skips empty values', () => {
   assert.equal(escapeHtml(`<a href="x">'&'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;');
@@ -104,6 +103,6 @@ test('terms are not numbered', () => {
 });
 
 test('unset company details leave no empty labels or placeholder text', () => {
-  const html = markup(renderDocumentHtml(quoteDocument(quoteFixture(), DOCUMENT_CONFIG)));
+  const html = markup(renderDocumentHtml(quoteDocument(quoteFixture(), BLANK_CONFIG)));
   assert.doesNotMatch(html, /null|undefined|example\.com|<p><\/p>/);
 });

@@ -1,8 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { documentFileName, invoiceDocument, quoteDocument, splitTerms, termsPlacement } from './documentModel';
-import { invoiceFixture, quoteFixture, SAMPLE_CONFIG } from './testFixtures';
-import { DOCUMENT_CONFIG } from '../sales/documentConfig';
+import { BLANK_CONFIG, invoiceFixture, quoteFixture, SAMPLE_CONFIG } from './testFixtures';
 
 const totalsOf = (rows: { label: string; value: string }[]) => rows.map((r) => `${r.label} = ${r.value}`);
 
@@ -108,8 +107,8 @@ test('quote payment block uses the central config; no bank details are invented'
   assert.equal(doc.paymentStatus, null);
 });
 
-test('with the real (not yet filled in) config nothing fake is printed', () => {
-  const doc = quoteDocument(quoteFixture(), DOCUMENT_CONFIG);
+test('with company details unset nothing fake is printed', () => {
+  const doc = quoteDocument(quoteFixture(), BLANK_CONFIG);
   const text = JSON.stringify(doc);
   assert.doesNotMatch(text, /example\.com|000-0000|Your Street|Bank Name|Acct 0/);
   assert.equal(doc.payment!.rows.some((r) => r.label === 'E-Transfer'), false); // no e-transfer address configured
