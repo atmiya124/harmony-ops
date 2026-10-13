@@ -102,6 +102,15 @@ test('terms are not numbered', () => {
   assert.doesNotMatch(html, />0[1-5]</);
 });
 
+test('event details print at the foot of the customer column', () => {
+  const html = markup(renderDocumentHtml(quoteDocument(quoteFixture(), SAMPLE_CONFIG)));
+  const customer = html.slice(html.indexOf('class="party customer-block"'), html.indexOf('Quote details:'));
+  assert.ok(customer.includes('<div class="event-title">Event details</div>'));
+  assert.ok(customer.includes('Smith Corporate Gala'));
+  const none = markup(renderDocumentHtml(quoteDocument(quoteFixture({ overrides: { eventName: null, eventDate: null } }), SAMPLE_CONFIG)));
+  assert.ok(!none.includes('event-block'));
+});
+
 test('unset company details leave no empty labels or placeholder text', () => {
   const html = markup(renderDocumentHtml(quoteDocument(quoteFixture(), BLANK_CONFIG)));
   assert.doesNotMatch(html, /null|undefined|example\.com|<p><\/p>/);

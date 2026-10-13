@@ -36,11 +36,13 @@ export function HarmonyMark({ width }: { width: number }) {
 export function DocumentHeader({ doc }: { doc: DocumentModel }) {
   const c = doc.company;
   return (
+    // A grid: the orange rule on its own row, then the logo, contact details
+    // and title side by side on one row, all centred on the same line.
     <div className="head-top">
+      <div className="head-rule" />
       <div className="brand">
         <HarmonyLogo width={270} />
       </div>
-      <div className="head-rule">
       <div className="company-contact">
         {c.addressLines.length ? <p>{c.addressLines.join(', ')}</p> : null}
         {c.phones.length ? <p>{c.phones.join(' // ')}</p> : null}
@@ -49,7 +51,6 @@ export function DocumentHeader({ doc }: { doc: DocumentModel }) {
         {c.website ? <p>{c.website}</p> : null}
       </div>
       <DocumentIdentity doc={doc} />
-      </div>
     </div>
   );
 }
@@ -92,6 +93,25 @@ export function CustomerBlock({ doc }: { doc: DocumentModel }) {
       ) : null}
       {c.email ? <div className="customer-row email">{c.email}</div> : null}
       {c.phone ? <div className="customer-row phone">{c.phone}</div> : null}
+      <EventBlock doc={doc} />
+    </div>
+  );
+}
+
+// The event, at the foot of the customer column — level with the total
+// banner opposite, in the space below the client's details.
+export function EventBlock({ doc }: { doc: DocumentModel }) {
+  if (doc.event.length === 0) return null;
+  return (
+    <div className="event-block">
+      <div className="event-title">Event details</div>
+      {doc.event.map((e) => (
+        <div className="meta-row" key={e.label}>
+          <span className="meta-label">{e.label}</span>
+          <span className="meta-colon">:</span>
+          <span className="event-value">{e.value}</span>
+        </div>
+      ))}
     </div>
   );
 }

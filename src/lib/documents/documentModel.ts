@@ -65,6 +65,9 @@ export interface DocumentModel {
   };
   metaHeading: string;
   meta: { label: string; value: string; strong?: boolean }[];
+  // The event, printed at the foot of the customer column. Empty = no event
+  // details on the quote/invoice, and the block is left out.
+  event: { label: string; value: string }[];
   banner: { label: string; value: string };
   sections: DocumentSection[];
   totals: DocumentTotalRow[];
@@ -170,6 +173,19 @@ function chargeRows(d: {
   return rows;
 }
 
+// Event name, date and venue. A quote for an event whose date isn't fixed
+// yet shows "TBC", as on the reference; with no event details at all the
+// block is dropped.
+function eventRows(d: { eventName: string | null; eventDate: string | null; venueName: string | null; venueAddress: string | null }) {
+  const venue = [d.venueName, d.venueAddress].filter(Boolean).join(', ');
+  if (!d.eventName && !d.eventDate && !venue) return [];
+  return [
+    ...(d.eventName ? [{ label: 'Event', value: d.eventName }] : []),
+    { label: 'Event date', value: documentDate(d.eventDate) },
+    ...(venue ? [{ label: 'Venue', value: venue }] : []),
+  ];
+}
+
 function customerOf(heading: string, d: { customerName: string; customerCompany: string | null; billingAddress: string | null; customerEmail: string | null; customerPhone: string | null }) {
   return {
     heading,
@@ -208,10 +224,8 @@ export function quoteDocument(q: QuoteDto, config: DocumentConfig): DocumentMode
       { label: 'Quote N°', value: q.quoteNumber, strong: true },
       { label: 'Quote date', value: documentDate(q.quoteDate) },
       { label: 'Valid until', value: documentDate(q.validUntil) },
-      { label: 'Event date', value: documentDate(q.eventDate) },
-      ...(q.eventName ? [{ label: 'Event', value: q.eventName }] : []),
-      ...(q.venueName ? [{ label: 'Venue', value: q.venueName }] : []),
     ],
+    event: eventRows(q),
     banner: { label: 'Total estimate', value: money(q.totalCents) },
     sections: sectionsOf(q.items),
     totals,
@@ -282,9 +296,8 @@ export function invoiceDocument(inv: InvoiceDto, config: DocumentConfig): Docume
       { label: 'Invoice date', value: documentDate(inv.invoiceDate) },
       { label: 'Due date', value: documentDate(inv.dueDate), strong: true },
       ...(inv.quoteNumber ? [{ label: 'Quote ref', value: inv.quoteNumber }] : []),
-      ...(inv.eventName ? [{ label: 'Event', value: inv.eventName }] : []),
-      ...(inv.eventDate ? [{ label: 'Event date', value: documentDate(inv.eventDate) }] : []),
     ],
+    event: eventRows(inv),
     banner: { label: 'Balance due', value: money(inv.balanceDueCents) },
     sections: sectionsOf(inv.items),
     totals,

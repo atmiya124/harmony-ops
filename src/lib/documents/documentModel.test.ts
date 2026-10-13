@@ -69,16 +69,28 @@ test('customer and meta: real values only, missing ones dropped', () => {
   assert.deepEqual(full.customer.addressLines, ['220 West 53rd Street, New York, NY 10019, USA']);
   assert.deepEqual(
     full.meta.map((m) => `${m.label}: ${m.value}`),
-    ['Quote N°: Q-000000218', 'Quote date: 13 Oct, 2026', 'Valid until: 12 Nov, 2026', 'Event date: 17 Oct, 2026', 'Event: Smith Corporate Gala'],
+    ['Quote N°: Q-000000218', 'Quote date: 13 Oct, 2026', 'Valid until: 12 Nov, 2026'],
   );
+  // Event details live at the foot of the customer column, not with the quote details.
+  assert.deepEqual(
+    full.event.map((m) => `${m.label}: ${m.value}`),
+    ['Event: Smith Corporate Gala', 'Event date: 17 Oct, 2026'],
+  );
+  const withVenue = quoteDocument(quoteFixture({ overrides: { venueName: 'Palais Royale', venueAddress: '1601 Lake Shore Blvd W' } }), SAMPLE_CONFIG);
+  assert.deepEqual(withVenue.event.at(-1), { label: 'Venue', value: 'Palais Royale, 1601 Lake Shore Blvd W' });
 
   const bare = quoteDocument(
     quoteFixture({ overrides: { customerCompany: null, customerEmail: null, customerPhone: null, billingAddress: null, eventDate: null, eventName: null } }),
     SAMPLE_CONFIG,
   );
   assert.deepEqual(bare.customer, { heading: 'Quote prepared for:', name: 'Michael Smith', company: null, addressLines: [], email: null, phone: null });
-  assert.equal(bare.meta.find((m) => m.label === 'Event date')!.value, 'TBC'); // as on the reference
-  assert.equal(bare.meta.some((m) => m.label === 'Event'), false);
+  assert.deepEqual(bare.event, []); // no event details at all: the block is left out
+
+  const undated = quoteDocument(quoteFixture({ overrides: { eventDate: null } }), SAMPLE_CONFIG);
+  assert.deepEqual(undated.event, [
+    { label: 'Event', value: 'Smith Corporate Gala' },
+    { label: 'Event date', value: 'TBC' }, // as on the reference
+  ]);
 
   const multiLine = quoteDocument(quoteFixture({ overrides: { billingAddress: 'Unit 4\n\n  100 Long Road  \nToronto, ON' } }), SAMPLE_CONFIG);
   assert.deepEqual(multiLine.customer.addressLines, ['Unit 4', '100 Long Road', 'Toronto, ON']);
@@ -128,7 +140,11 @@ test('invoice totals: invoice total, deposit paid, balance due — all stored va
   assert.deepEqual(doc.banner, { label: 'Balance due', value: '$8,716.82' });
   assert.deepEqual(
     doc.meta.map((m) => `${m.label}: ${m.value}`),
-    ['Invoice N°: INV-000000218', 'Invoice date: 13 Oct, 2026', 'Due date: 27 Oct, 2026', 'Quote ref: Q-000000218', 'Event: Smith Corporate Gala', 'Event date: 17 Oct, 2026'],
+    ['Invoice N°: INV-000000218', 'Invoice date: 13 Oct, 2026', 'Due date: 27 Oct, 2026', 'Quote ref: Q-000000218'],
+  );
+  assert.deepEqual(
+    doc.event.map((m) => `${m.label}: ${m.value}`),
+    ['Event: Smith Corporate Gala', 'Event date: 17 Oct, 2026'],
   );
   assert.equal(doc.fileName, 'Harmony_Production_Invoice_INV-000000218.pdf');
   assert.equal(doc.payment!.reference, 'Reference: INV-000000218');

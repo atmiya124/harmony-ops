@@ -60,19 +60,24 @@ p { margin: 0; }
 /* ---------- header (page 1) ---------- */
 /* Full-bleed striped band behind the logo, contact details and title; the
    orange rule above the contact details runs to the right margin. */
-.head-top { display: flex; align-items: center; gap: 14px; margin: 0 -13mm; padding: 10mm 13mm 8mm; background: var(--stripes); }
+.head-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 22px; row-gap: 24px; align-items: center; margin: 0 -13mm; padding: 10mm 13mm 8mm; background: var(--stripes); }
+.head-top > .brand { grid-row: 2; grid-column: 1; }
+.head-top > .company-contact { grid-row: 2; grid-column: 2; }
+.head-top > .doc-title { grid-row: 2; grid-column: 3; }
 .brand { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
-.head-top .brand { margin-top: 22px; }
 .logo { display: block; }
-.head-rule { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 10px; border-top: 2.5px solid var(--accent); padding-top: 28px; }
-.company-contact { flex: 1 1 auto; min-width: 0; font-size: 8.6px; line-height: 1.55; color: var(--ink); min-height: 10px; padding-left: 8px; }
+/* The orange rule over the contact details and title. */
+.head-rule { grid-row: 1; grid-column: 2 / 4; border-top: 2.5px solid var(--accent); }
+.company-contact { min-width: 0; font-size: 8.6px; line-height: 1.55; color: var(--ink); }
 .company-contact .muted { color: var(--ink-3); font-size: 8px; }
-.doc-title { flex: 0 0 auto; text-align: right; }
+.doc-title { text-align: right; }
 .doc-title h1 { margin: 0; font-size: 52px; line-height: 1; font-weight: 700; letter-spacing: -1px; }
 .doc-title .subtitle { margin-top: 10px; font-size: 7.6px; letter-spacing: 3.4px; color: var(--ink-2); text-transform: uppercase; }
 
 .parties { display: flex; border-top: 1px solid var(--line); }
 .party { flex: 1 1 0; padding: 12px 18px 0 0; min-width: 0; }
+/* A column, so the event details can sit at the bottom of it. */
+.customer-block { display: flex; flex-direction: column; }
 .party + .party { border-left: 1px solid var(--line); padding: 12px 0 0 18px; flex: 0 0 41%; display: flex; flex-direction: column; }
 .eyebrow { font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ink); }
 .eyebrow::before { content: ''; display: block; width: 22px; height: 2.5px; background: var(--accent); margin-bottom: 7px; }
@@ -84,6 +89,11 @@ p { margin: 0; }
 .customer-row.email { color: var(--accent-ink); }
 .customer-row.phone { font-size: 10.5px; font-weight: 500; }
 .customer-block > .customer-row:first-of-type { margin-top: 8px; }
+.event-block { margin-top: auto; padding: 14px 0 10px; }
+.event-title { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ink-2); padding-bottom: 5px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.event-block .meta-label { flex-basis: 70px; }
+.event-block .meta-colon { padding: 0 8px; }
+.event-value { flex: 1 1 auto; font-size: 10px; word-break: break-word; }
 .meta { margin: 8px 0 12px 22px; }
 .meta-row { display: flex; align-items: baseline; padding: 2.5px 0; }
 .meta-label { flex: 0 0 82px; font-size: 7.8px; text-transform: uppercase; color: var(--ink-2); }
