@@ -9,7 +9,7 @@ import { quoteDocument } from '../documents/documentModel';
 import { renderPdf } from '../documents/renderPdf';
 import { renderDocumentHtml } from '@/components/documents/renderDocument';
 import { todayInFinanceTz } from '../finance/today';
-import { EmailError, isEmailConfigured, sendEmail } from '../email/resend';
+import { EmailError, emailConfigDiagnostics, isEmailConfigured, sendEmail } from '../email/resend';
 import { DOCUMENT_CONFIG, type DocumentConfig } from './documentConfig';
 import { quoteEmailContent } from './quoteEmail';
 import { EMAILABLE_QUOTE_STATUSES, QUOTE_STATUS_LABELS } from './types';
@@ -29,7 +29,13 @@ export async function sendQuoteEmail(
   if (!quote.customerEmail) throw new FinanceError(422, 'Add the client’s email to the quote before sending it.');
   if (!EMAILABLE_QUOTE_STATUSES.includes(quote.status)) throw new FinanceError(409, `${QUOTE_STATUS_LABELS[quote.status]} quotes can’t be sent.`);
   if (quote.validUntil < todayInFinanceTz()) throw new FinanceError(409, 'This quote has expired. Update its valid-until date before sending it.');
-  if (!isEmailConfigured()) throw new EmailError('Email isn’t set up yet. Add RESEND_API_KEY and QUOTE_EMAIL_FROM to the environment.', 503);
+  if (!isEmailConfigured()) {
+    // TEMPORARY-EMAIL-DIAGNOSTICS (no secrets: presence, lengths, names).
+    const d = emailConfigDiagnostics();
+    console.warn('[email] not configured:', d);
+    const seen = `server sees RESEND_API_KEY ${d.hasResendKey ? `set (${d.resendKeyLength} chars)` : 'missing'}, QUOTE_EMAIL_FROM ${d.hasQuoteFrom ? `set (${d.quoteFromLength} chars)` : 'missing'}; similar names: ${d.similarNames.join(', ') || 'none'}; env ${d.vercelEnv ?? 'local'}, build ${d.commit ?? 'local'}, ${d.runtime}`;
+    throw new EmailError(`Email isn’t set up yet. Add RESEND_API_KEY and QUOTE_EMAIL_FROM to the environment. [${seen}]`, 503);
+  }
 
   // The PDF first: if it fails, nothing has changed yet.
   const { pdf } = await renderPdf(renderDocumentHtml(quoteDocument(quote, config)));
