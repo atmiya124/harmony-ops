@@ -36,26 +36,6 @@ export function emailSender(): string | null {
   return process.env.QUOTE_EMAIL_FROM?.trim() || null;
 }
 
-// TEMPORARY-EMAIL-DIAGNOSTICS: what the running server sees, without any
-// secret — presence and length only, plus the *names* of look-alike
-// variables (a typo or stray space in a name shows up here).
-export function emailConfigDiagnostics() {
-  const key = process.env.RESEND_API_KEY?.trim() ?? '';
-  const from = process.env.QUOTE_EMAIL_FROM?.trim() ?? '';
-  return {
-    hasResendKey: key.length > 0,
-    resendKeyLength: key.length,
-    hasQuoteFrom: from.length > 0,
-    quoteFromLength: from.length,
-    similarNames: Object.keys(process.env)
-      .filter((name) => /resend|email_from|quote_email/i.test(name))
-      .map((name) => JSON.stringify(name)),
-    vercelEnv: process.env.VERCEL_ENV ?? null,
-    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
-    runtime: typeof (globalThis as { EdgeRuntime?: unknown }).EdgeRuntime === 'string' ? 'edge' : `node ${process.version}`,
-  };
-}
-
 export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim() && emailSender());
 }
