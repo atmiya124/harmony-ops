@@ -10,7 +10,7 @@ import { FinanceError, nextTimestamp, nowIso, type Actor, type Tx } from './fina
 import { nextDocumentNumber } from './documentNumbers';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { QUOTE_DEFAULTS, type QuoteDefaults } from '../sales/defaults';
-import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteEmailSendKind, type QuoteStatus, type SalesAuditAction } from '../sales/types';
+import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteEmailSendKind, type QuotePaymentMethod, type QuoteStatus, type SalesAuditAction, effectiveTaxRateBp } from '../sales/types';
 import type { QuoteCreateInput, QuoteStatusInput, QuoteUpdateInput } from '../schemas/quote';
 
 // ---------------------------------------------------------------------------
@@ -72,6 +72,7 @@ export interface QuoteDto extends QuoteSummaryDto {
   notes: string | null;
   terms: string | null;
   showPaymentDetails: boolean; // print the payment section on the PDF
+  paymentMethod: QuotePaymentMethod | null; // null = not chosen; cash = no HST
   statusChangedAt: string | null;
   sentAt: string | null;
   acceptedAt: string | null;
@@ -162,7 +163,7 @@ function pricedQuote(input: QuoteCreateInput | QuoteUpdateInput) {
   const totals = calculateQuoteTotals({
     items: input.items.map((i) => ({ ...i, discount: { type: i.discountType, value: i.discountValue } })),
     discount: { type: input.discountType, value: input.discountValue },
-    taxRateBp: input.taxRateBp,
+    taxRateBp: effectiveTaxRateBp(input.paymentMethod, input.taxRateBp),
     deposit: { type: input.depositType, value: input.depositValue },
   });
   const fields = {
@@ -183,7 +184,8 @@ function pricedQuote(input: QuoteCreateInput | QuoteUpdateInput) {
     discountValue: input.discountValue,
     discountCents: totals.discountCents,
     taxLabel: input.taxLabel,
-    taxRateBp: input.taxRateBp,
+    // A cash quote stores 0%: the stored rate always matches the stored tax.
+    taxRateBp: effectiveTaxRateBp(input.paymentMethod, input.taxRateBp),
     taxCents: totals.taxCents,
     totalCents: totals.totalCents,
     depositType: input.depositType,
@@ -192,6 +194,7 @@ function pricedQuote(input: QuoteCreateInput | QuoteUpdateInput) {
     notes: input.notes,
     terms: input.terms,
     showPaymentDetails: input.showPaymentDetails,
+    paymentMethod: input.paymentMethod,
   };
   return { fields, lines: { totals: totals.lineTotalsCents, discounts: totals.lineDiscountsCents } };
 }
@@ -285,6 +288,7 @@ export async function getQuote(id: string, reader: Tx | typeof db = db): Promise
     notes: row.notes,
     terms: row.terms,
     showPaymentDetails: row.showPaymentDetails,
+    paymentMethod: row.paymentMethod,
     statusChangedAt: row.statusChangedAt,
     sentAt: row.sentAt,
     acceptedAt: row.acceptedAt,
@@ -457,6 +461,7 @@ export async function cloneQuote(id: string, newId: string, today: string, actor
     notes: source.notes,
     terms: source.terms,
     showPaymentDetails: source.showPaymentDetails,
+    paymentMethod: source.paymentMethod,
   };
   return (await createQuote(input, actor)).quote;
 }

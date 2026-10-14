@@ -11,7 +11,7 @@ import { formatCents } from '@/lib/money';
 import { adjustmentCents } from '@/lib/quoteCalculator';
 import { formatBp, parsePriceToCents, parseQuantity } from '@/lib/sales/inputs';
 import type { QuoteDefaults } from '@/lib/sales/defaults';
-import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, SECTION_PRESETS, type AdjustmentType } from '@/lib/sales/types';
+import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_PAYMENT_METHODS, SECTION_PRESETS, type AdjustmentType, type QuotePaymentMethod } from '@/lib/sales/types';
 import {
   blankDraft,
   blankItem,
@@ -321,6 +321,22 @@ export default function QuoteBuilder(props: Props) {
       <aside className="contents lg:sticky lg:top-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block lg:self-start lg:rounded-[28px] lg:bg-[var(--tray)] lg:p-2">
         <Card className="order-2 lg:order-none lg:rounded-[22px] lg:border-0 lg:shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
           <Eyebrow>Totals</Eyebrow>
+          {/* Decides the tax (cash = no HST) and what the PDF lists under payment. */}
+          <Field label="Payment method" className="mb-4">
+            <select
+              className={inputClass}
+              value={draft.paymentMethod ?? ''}
+              onChange={(e) => set('paymentMethod', (e.target.value || null) as QuotePaymentMethod | null)}
+            >
+              <option value="">Not specified (list all methods)</option>
+              {QUOTE_PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {QUOTE_PAYMENT_METHOD_LABELS[m]}
+                  {m === 'cash' ? ' (no HST)' : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
           <dl className="space-y-3 text-[14px]">
             {totals.itemDiscountsCents > 0 ? (
               <>
@@ -342,34 +358,39 @@ export default function QuoteBuilder(props: Props) {
               }}
               onValue={(v) => set('discountValue', v)}
             />
-            <div>
-              <div className="flex items-center gap-2">
-                <dt className="flex min-w-0 flex-1 items-center gap-1.5 text-[var(--ink-2)]">
-                  <span className="w-16 shrink-0">
-                    <input
-                      aria-label="Tax name"
-                      className={`${inputClass} px-2 py-1`}
-                      value={draft.taxLabel}
-                      onChange={(e) => set('taxLabel', e.target.value)}
-                      aria-invalid={!!errors.taxLabel}
-                    />
-                  </span>
-                  <span className="relative w-20 shrink-0">
-                    <input
-                      aria-label="Tax rate (%)"
-                      inputMode="decimal"
-                      className={`${inputClass} py-1 pl-2 pr-6`}
-                      value={draft.taxRate}
-                      onChange={(e) => set('taxRate', e.target.value)}
-                      aria-invalid={!!errors.taxRate}
-                    />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[13px] text-[var(--ink-3)]">%</span>
-                  </span>
-                </dt>
-                <dd className="tabular-nums">{formatCents(totals.taxCents)}</dd>
+            {draft.paymentMethod === 'cash' ? (
+              // The typed rate is kept (not shown) so switching back restores it.
+              <Row label={`No ${draft.taxLabel || 'HST'} on cash`} value={formatCents(0)} />
+            ) : (
+              <div>
+                <div className="flex items-center gap-2">
+                  <dt className="flex min-w-0 flex-1 items-center gap-1.5 text-[var(--ink-2)]">
+                    <span className="w-16 shrink-0">
+                      <input
+                        aria-label="Tax name"
+                        className={`${inputClass} px-2 py-1`}
+                        value={draft.taxLabel}
+                        onChange={(e) => set('taxLabel', e.target.value)}
+                        aria-invalid={!!errors.taxLabel}
+                      />
+                    </span>
+                    <span className="relative w-20 shrink-0">
+                      <input
+                        aria-label="Tax rate (%)"
+                        inputMode="decimal"
+                        className={`${inputClass} py-1 pl-2 pr-6`}
+                        value={draft.taxRate}
+                        onChange={(e) => set('taxRate', e.target.value)}
+                        aria-invalid={!!errors.taxRate}
+                      />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[13px] text-[var(--ink-3)]">%</span>
+                    </span>
+                  </dt>
+                  <dd className="tabular-nums">{formatCents(totals.taxCents)}</dd>
+                </div>
+                {errors.taxRate || errors.taxLabel ? <p className="mt-1 text-[12px] text-[var(--bad)]">{errors.taxRate ?? errors.taxLabel}</p> : null}
               </div>
-              {errors.taxRate || errors.taxLabel ? <p className="mt-1 text-[12px] text-[var(--bad)]">{errors.taxRate ?? errors.taxLabel}</p> : null}
-            </div>
+            )}
             <div className="flex items-baseline justify-between border-t border-[var(--line)] pt-3">
               <dt className="text-[13px] font-bold uppercase tracking-[0.06em]">Total</dt>
               <dd className="text-[22px] font-bold tabular-nums text-[var(--accent-ink)]">{formatCents(totals.totalCents)}</dd>

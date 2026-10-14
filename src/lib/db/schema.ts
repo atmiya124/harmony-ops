@@ -27,6 +27,7 @@ import {
   MAX_SIGNATURE_DATA_LENGTH,
   QUOTE_ACTIVITY_EVENTS,
   QUOTE_EMAIL_SEND_KINDS,
+  QUOTE_PAYMENT_METHODS,
   QUOTE_RESPONSE_ACTIONS,
   SIGNATURE_TYPES,
 } from '../sales/types';
@@ -490,6 +491,10 @@ export const quotes = sqliteTable(
     // Whether the PDF prints the payment section (methods, e-transfer, card).
     // Added in migration 0007.
     showPaymentDetails: integer('show_payment_details', { mode: 'boolean' }).notNull().default(true),
+    // How the client will pay; null = not chosen (all methods listed). Cash
+    // means no HST. Added in migration 0010 — checked by the app (a CHECK
+    // can't be added to an existing table on the shared database).
+    paymentMethod: text('payment_method', { enum: QUOTE_PAYMENT_METHODS }),
 
     // Lifecycle timestamps (ISO). Set by status changes; Phase 3's client
     // link records the acceptance details in its own table.

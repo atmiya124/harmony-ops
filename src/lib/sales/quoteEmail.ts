@@ -25,7 +25,8 @@ export function quoteEmailSubject(q: QuoteDto, config: DocumentConfig): string {
 
 // The figures shown in the email, label → value.
 function figures(q: QuoteDto): [string, string][] {
-  const rows: [string, string][] = [[`Total estimate (incl. ${q.taxLabel})`, `${formatCents(q.totalCents)} ${q.currency}`]];
+  const totalLabel = q.paymentMethod === 'cash' ? `Total estimate (cash, no ${q.taxLabel})` : `Total estimate (incl. ${q.taxLabel})`;
+  const rows: [string, string][] = [[totalLabel, `${formatCents(q.totalCents)} ${q.currency}`]];
   if (q.depositType !== 'none' && q.depositRequiredCents > 0) {
     rows.push([`Deposit to book${q.depositType === 'percent' ? ` (${formatBp(q.depositValue)})` : ''}`, formatCents(q.depositRequiredCents)]);
   }

@@ -71,6 +71,13 @@
       "when": 1791993104985,
       "tag": "0009_quote_email_sends",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792003737487,
+      "tag": "0010_quote_payment_method",
+      "breakpoints": true
     }
   ]
 }

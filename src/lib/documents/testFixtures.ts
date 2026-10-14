@@ -141,6 +141,7 @@ export function quoteFixture(o: QuoteFixtureOptions = {}): QuoteDto {
     notes: null,
     terms: REFERENCE_TERMS,
     showPaymentDetails: true,
+    paymentMethod: null,
     statusChangedAt: null,
     sentAt: null,
     acceptedAt: '2026-10-13T15:00:00.000Z',

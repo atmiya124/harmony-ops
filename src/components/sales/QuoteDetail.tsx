@@ -9,7 +9,7 @@ import { formatCents } from '@/lib/money';
 import { formatBp } from '@/lib/sales/inputs';
 import { activityDateTime, torontoDate } from '@/lib/sales/format';
 import { groupBySection } from '@/lib/sales/quoteDraft';
-import { canSetQuoteStatus, isQuoteEditable, MANUAL_QUOTE_STATUSES, QUOTE_STATUS_LABELS, type QuoteStatus } from '@/lib/sales/types';
+import { canSetQuoteStatus, isQuoteEditable, MANUAL_QUOTE_STATUSES, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_STATUS_LABELS, type QuoteStatus } from '@/lib/sales/types';
 import ClientLinkCard from './ClientLinkCard';
 import { buttonClass, ButtonLink, Card, documentDate, Eyebrow, InvoiceStatusBadge, Notice, quoteStatusColor } from './ui';
 
@@ -174,7 +174,7 @@ function Totals({ quote }: { quote: QuoteDto }) {
       {quote.discountType !== 'none' ? (
         <Row label={`Discount${quote.discountType === 'percent' ? ` ${formatBp(quote.discountValue)}` : ''}`} value={`−${formatCents(quote.discountCents)}`} tone="text-[var(--bad)]" />
       ) : null}
-      <Row label={`${quote.taxLabel} ${formatBp(quote.taxRateBp)}`} value={formatCents(quote.taxCents)} />
+      <Row label={quote.paymentMethod === 'cash' ? `No ${quote.taxLabel} (cash payment)` : `${quote.taxLabel} ${formatBp(quote.taxRateBp)}`} value={formatCents(quote.taxCents)} />
       <div className="flex items-baseline justify-between border-t border-[var(--line)] pt-3">
         <dt className="font-semibold">Total estimate</dt>
         <dd className="text-[18px] font-bold tabular-nums">
@@ -194,6 +194,7 @@ function Details({ quote }: { quote: QuoteDto }) {
       <Row label="Quote №" value={quote.quoteNumber} />
       <Row label="Quote date" value={documentDate(quote.quoteDate)} />
       <Row label="Valid until" value={documentDate(quote.validUntil)} />
+      <Row label="Payment method" value={quote.paymentMethod ? QUOTE_PAYMENT_METHOD_LABELS[quote.paymentMethod] : 'Not specified'} />
       <Row label="Deposit" value={quote.depositType === 'none' ? 'None' : formatCents(quote.depositRequiredCents)} />
       <Row label="Payment on PDF" value={quote.showPaymentDetails ? 'Shown' : 'Hidden'} />
       <Row label="Created by" value={quote.createdByEmail} />

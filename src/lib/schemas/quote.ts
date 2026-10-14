@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MAX_AMOUNT_CENTS, MAX_HST_RATE_BP } from '../finance/types';
-import { ADJUSTMENT_TYPES, type AdjustmentType, MAX_ITEM_QUANTITY, MAX_PERCENT_BP, MAX_QUOTE_ITEMS, MANUAL_QUOTE_STATUSES, QUOTE_STATUSES, type QuoteStatus } from '../sales/types';
+import { ADJUSTMENT_TYPES, type AdjustmentType, effectiveTaxRateBp, MAX_ITEM_QUANTITY, MAX_PERCENT_BP, MAX_QUOTE_ITEMS, MANUAL_QUOTE_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_STATUSES, type QuoteStatus } from '../sales/types';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { isCalendarDate } from './finance';
 
@@ -76,6 +76,11 @@ const quoteFields = {
   terms: optionalText(8000),
   // Print the payment section on the PDF. Omitted = yes.
   showPaymentDetails: z.boolean().default(true),
+  // How the client will pay; omitted = not chosen. Cash = no HST.
+  paymentMethod: z
+    .enum(QUOTE_PAYMENT_METHODS, 'Choose a payment method')
+    .nullish()
+    .transform((v) => v ?? null),
 };
 
 type QuoteFieldsOutput = z.output<z.ZodObject<typeof quoteFields>>;
@@ -102,7 +107,7 @@ function refineQuote(v: QuoteFieldsOutput, ctx: z.RefinementCtx) {
     totals = calculateQuoteTotals({
       items: v.items.map((i) => ({ ...i, discount: { type: i.discountType, value: i.discountValue } })),
       discount: { type: v.discountType, value: v.discountValue },
-      taxRateBp: v.taxRateBp,
+      taxRateBp: effectiveTaxRateBp(v.paymentMethod, v.taxRateBp),
       deposit: { type: v.depositType, value: v.depositValue },
     });
   } catch {

@@ -12,6 +12,7 @@ import { formatBp } from '../sales/inputs';
 import { documentDate, documentDateTime, torontoDate } from '../sales/format';
 import { groupBySection } from '../sales/quoteDraft';
 import type { DocumentConfig } from '../sales/documentConfig';
+import { QUOTE_PAYMENT_METHOD_LABELS, type QuotePaymentMethod } from '../sales/types';
 
 export interface DocumentItem {
   name: string;
@@ -171,6 +172,7 @@ function chargeRows(d: {
   taxLabel: string;
   taxRateBp: number;
   taxCents: number;
+  paymentMethod?: QuotePaymentMethod | null;
 }): DocumentTotalRow[] {
   const rows: DocumentTotalRow[] = [];
   if (d.itemDiscountsCents > 0) {
@@ -181,7 +183,9 @@ function chargeRows(d: {
   if (d.discountCents > 0) {
     rows.push({ label: `Discount${d.discountType === 'percent' ? ` ${formatBp(d.discountValue)}` : ''}`, value: minus(d.discountCents), tone: 'discount' });
   }
-  if (d.taxRateBp > 0 || d.taxCents > 0) rows.push({ label: `${d.taxLabel} ${formatBp(d.taxRateBp)}`, value: money(d.taxCents), tone: 'plain' });
+  // Cash: no HST, said plainly rather than the line just being missing.
+  if (d.paymentMethod === 'cash') rows.push({ label: `No ${d.taxLabel} (cash payment)`, value: money(0), tone: 'plain' });
+  else if (d.taxRateBp > 0 || d.taxCents > 0) rows.push({ label: `${d.taxLabel} ${formatBp(d.taxRateBp)}`, value: money(d.taxCents), tone: 'plain' });
   return rows;
 }
 
@@ -233,8 +237,28 @@ export function signedAcceptance(q: QuoteDto, a: DocumentAcceptance | null): Sig
   return { name: a.customerName?.trim() || q.customerName, title: a.customerTitle?.trim() || null, date: documentDate(torontoDate(a.acceptedAt)), acceptedAt: documentDateTime(a.acceptedAt), signature };
 }
 
+// The quote's payment section: every method when none was chosen, or just
+// the chosen one (with its details, where the company has any set).
+function quotePayment(method: QuotePaymentMethod | null, config: DocumentConfig, etransfer: PaymentRow[], cardRow: PaymentRow[]): NonNullable<DocumentModel['payment']> {
+  if (!method) {
+    return {
+      title: config.payment.methods.length ? `Payment method: ${config.payment.methods.join(', ')}` : 'Payment',
+      reference: null,
+      rows: [...etransfer, ...cardRow],
+      note: config.email,
+    };
+  }
+  const rows: Record<QuotePaymentMethod, PaymentRow[]> = {
+    etransfer,
+    card: cardRow,
+    bank_transfer: [],
+    cash: [{ label: 'Cash', value: 'Paid in cash — no HST is charged' }],
+  };
+  return { title: `Payment method: ${QUOTE_PAYMENT_METHOD_LABELS[method]}`, reference: null, rows: rows[method], note: config.email };
+}
+
 export function quoteDocument(q: QuoteDto, config: DocumentConfig, accepted: DocumentAcceptance | null = null): DocumentModel {
-  const totals = chargeRows(q);
+  const totals = chargeRows(q); // q carries paymentMethod: cash = no HST line
   const deposit: DocumentTotalRow[] =
     q.depositType !== 'none' && q.depositRequiredCents > 0
       ? [{ label: `Deposit required${q.depositType === 'percent' ? ` (${formatBp(q.depositValue)})` : ''}`, value: money(q.depositRequiredCents), tone: 'paid' }]
@@ -261,14 +285,7 @@ export function quoteDocument(q: QuoteDto, config: DocumentConfig, accepted: Doc
     totals,
     grandTotal: { label: 'Total estimate', value: money(q.totalCents) },
     afterGrandTotal: deposit,
-    payment: q.showPaymentDetails
-      ? {
-          title: config.payment.methods.length ? `Payment method: ${config.payment.methods.join(', ')}` : 'Payment',
-          reference: null,
-          rows: [...etransfer, ...cardRow],
-          note: config.email,
-        }
-      : null,
+    payment: q.showPaymentDetails ? quotePayment(q.paymentMethod, config, etransfer, cardRow) : null,
     questions: questionsOf(config, 'quote', q.quoteNumber),
     notes: q.notes,
     terms: splitTerms(q.terms),

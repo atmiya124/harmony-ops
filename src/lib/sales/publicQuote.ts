@@ -104,7 +104,7 @@ export function toPublicQuote(q: QuoteDto, response: PublicQuoteResponse | null,
       subtotalCents: q.subtotalCents,
       discountLabel: q.discountCents > 0 ? `Discount${q.discountType === 'percent' ? ` ${formatBp(q.discountValue)}` : ''}` : null,
       discountCents: q.discountCents,
-      taxLabel: q.taxRateBp > 0 || q.taxCents > 0 ? `${q.taxLabel} ${formatBp(q.taxRateBp)}` : null,
+      taxLabel: q.paymentMethod === 'cash' ? `No ${q.taxLabel} (cash payment)` : q.taxRateBp > 0 || q.taxCents > 0 ? `${q.taxLabel} ${formatBp(q.taxRateBp)}` : null,
       taxCents: q.taxCents,
       totalCents: q.totalCents,
       depositLabel:

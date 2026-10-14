@@ -163,7 +163,7 @@ function SendQuoteDialog({ quote, open, onClose, onSent }: { quote: QuoteDto; op
             <dl className="mt-4 space-y-1.5 text-[14px]">
               <Line label="Sub total" value={formatCents(quote.subtotalCents)} />
               {quote.discountCents > 0 ? <Line label="Discount" value={`−${formatCents(quote.discountCents)}`} tone="text-[var(--bad)]" /> : null}
-              <Line label={`${quote.taxLabel} ${formatBp(quote.taxRateBp)}`} value={formatCents(quote.taxCents)} />
+              <Line label={quote.paymentMethod === 'cash' ? `No ${quote.taxLabel} (cash payment)` : `${quote.taxLabel} ${formatBp(quote.taxRateBp)}`} value={formatCents(quote.taxCents)} />
               <div className="flex items-baseline justify-between border-t border-[var(--line)] pt-2">
                 <dt className="font-semibold">Total estimate</dt>
                 <dd className="text-[18px] font-bold tabular-nums">

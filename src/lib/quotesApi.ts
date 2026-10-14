@@ -2,7 +2,7 @@
 // the server assigns numbers and status and recalculates every total.
 import type { QuoteDto, QuoteSummaryDto } from './db/quoteRepo';
 import type { InvoiceSummaryDto } from './db/invoiceRepo';
-import type { AdjustmentType, QuoteStatus } from './sales/types';
+import type { AdjustmentType, QuotePaymentMethod, QuoteStatus } from './sales/types';
 import { invalidateCache, setCache } from './clientCache';
 import { json, request } from './apiClient';
 
@@ -56,6 +56,7 @@ export interface QuoteFormValues {
   notes: string | null;
   terms: string | null;
   showPaymentDetails: boolean;
+  paymentMethod: QuotePaymentMethod | null;
 }
 
 export function listQuotes(): Promise<QuoteSummaryDto[]> {

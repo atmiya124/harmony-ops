@@ -7,7 +7,7 @@ import { addDays } from '../finance/dates';
 import { MAX_HST_RATE_BP, MAX_AMOUNT_CENTS } from '../finance/types';
 import type { QuoteDefaults } from './defaults';
 import { bpToInput, parsePercentToBp, parsePriceToCents, parseQuantity, priceToInput, type Parsed } from './inputs';
-import type { AdjustmentType } from './types';
+import { effectiveTaxRateBp, type AdjustmentType, type QuotePaymentMethod } from './types';
 
 export interface ItemDraft {
   key: string; // React key; stable while editing
@@ -49,6 +49,8 @@ export interface QuoteDraft {
   notes: string;
   terms: string;
   showPaymentDetails: boolean;
+  // Cash = no HST; the typed tax rate is kept so switching back restores it.
+  paymentMethod: QuotePaymentMethod | null;
 }
 
 // What the API takes (mirrors QuoteFormValues in quotesApi).
@@ -75,6 +77,7 @@ export interface QuoteValues {
   notes: string | null;
   terms: string | null;
   showPaymentDetails: boolean;
+  paymentMethod: QuotePaymentMethod | null;
 }
 
 // The saved quote fields the builder starts from when editing.
@@ -117,6 +120,7 @@ export function blankDraft(defaults: QuoteDefaults, today: string): QuoteDraft {
     notes: '',
     terms: defaults.terms,
     showPaymentDetails: true,
+    paymentMethod: null,
   };
 }
 
@@ -169,6 +173,7 @@ export function draftFromQuote(q: SavedQuote): QuoteDraft {
     notes: q.notes ?? '',
     terms: q.terms ?? '',
     showPaymentDetails: q.showPaymentDetails,
+    paymentMethod: q.paymentMethod,
   };
 }
 
@@ -235,7 +240,8 @@ export function draftToValues(d: QuoteDraft): DraftResult {
 
   const discount = parseAdjustment(d.discountType, d.discountValue);
   if (!discount.ok) errors.discountValue = discount.error;
-  const tax = parsePercentToBp(d.taxRate, MAX_HST_RATE_BP);
+  // Cash quotes carry no HST, so the rate box isn't checked (or used).
+  const tax = d.paymentMethod === 'cash' ? ({ ok: true, value: 0 } as const) : parsePercentToBp(d.taxRate, MAX_HST_RATE_BP);
   if (!tax.ok) errors.taxRate = tax.error;
   if (!d.taxLabel.trim()) errors.taxLabel = 'Name the tax';
   const deposit = parseAdjustment(d.depositType, d.depositValue);
@@ -273,6 +279,7 @@ export function draftToValues(d: QuoteDraft): DraftResult {
       notes: orNull(d.notes),
       terms: orNull(d.terms),
       showPaymentDetails: d.showPaymentDetails,
+      paymentMethod: d.paymentMethod,
     },
     errors,
     itemKeys,
@@ -301,7 +308,7 @@ export function previewTotals(d: QuoteDraft): QuoteTotals {
     return calculateQuoteTotals({
       items,
       discount: { type: d.discountType, value: discount.ok ? discount.value : 0 },
-      taxRateBp: tax.ok ? tax.value : 0,
+      taxRateBp: effectiveTaxRateBp(d.paymentMethod, tax.ok ? tax.value : 0),
       deposit: { type: d.depositType, value: deposit.ok ? deposit.value : 0 },
     });
   } catch {

@@ -145,3 +145,17 @@ test('item discounts: parsed per line, previewed, and checked', () => {
   d.sections[1].items[0].discountValue = 'abc';
   assert.ok(draftToValues(d).errors['item:i2:discountValue']);
 });
+
+test('cash: the preview and saved values carry no HST; the typed rate is kept for switching back', () => {
+  const d = filled();
+  d.paymentMethod = 'cash';
+  d.taxRate = 'not a number'; // ignored for cash
+  assert.equal(previewTotals(d).taxCents, 0);
+  const { values, errors } = draftToValues(d);
+  assert.deepEqual(errors, {});
+  assert.equal(values!.paymentMethod, 'cash');
+  assert.equal(values!.taxRateBp, 0);
+
+  const back = { ...filled(), paymentMethod: 'etransfer' as const };
+  assert.equal(previewTotals(back).taxCents, 35880);
+});

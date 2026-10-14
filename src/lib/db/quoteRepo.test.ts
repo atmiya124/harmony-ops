@@ -296,6 +296,26 @@ test('clone: a new draft with a new number, today’s date, the same validity, i
   assert.equal((await repo.getQuote(quote.id))!.status, 'sent');
 });
 
+test('payment method: cash stores no HST whatever rate was sent; other methods are taxed', async () => {
+  const { quote: cash } = await repo.createQuote(input({ paymentMethod: 'cash', taxRateBp: 1300 }), actor);
+  assert.equal(cash.paymentMethod, 'cash');
+  assert.equal(cash.taxRateBp, 0);
+  assert.equal(cash.taxCents, 0);
+  assert.equal(cash.totalCents, cash.subtotalCents - cash.discountCents);
+
+  // Switching to e-transfer charges HST again.
+  const fields = omitId(input({ paymentMethod: 'etransfer', taxRateBp: 1300 }));
+  const etransfer = await repo.updateQuote(cash.id, { ...fields, expectedUpdatedAt: cash.updatedAt }, actor);
+  assert.equal(etransfer.paymentMethod, 'etransfer');
+  assert.equal(etransfer.taxRateBp, 1300);
+  assert.ok(etransfer.taxCents > 0);
+
+  // Not chosen is the default, and clones keep the method.
+  assert.equal((await repo.createQuote(input(), actor)).quote.paymentMethod, null);
+  assert.equal((await repo.cloneQuote(cash.id, randomUUID(), '2026-10-20', actor)).paymentMethod, 'etransfer');
+  assert.throws(() => input({ paymentMethod: 'cheque' }), /payment method/);
+});
+
 // Last: the deliberate lock contention leaves the local SQLite file busy for a moment.
 test('concurrent saves never share a quote number', async () => {
   const results = await Promise.allSettled(Array.from({ length: 12 }, () => repo.createQuote(input(), actor)));

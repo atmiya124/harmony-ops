@@ -259,3 +259,18 @@ test('no acceptance, or one that no longer matches the quote, leaves the lines b
   assert.equal(signedAcceptance(quote, accepted(quote, { quoteTotalCents: quote.totalCents + 100 })), null);
   assert.ok(signedAcceptance(quoteFixture({ overrides: { status: 'converted' } }), accepted(quote)));
 });
+
+test('payment method: cash prints "No HST (cash payment)" and only cash; a chosen method lists just that one', () => {
+  const cash = quoteDocument(quoteFixture({ taxRateBp: 0, overrides: { paymentMethod: 'cash' } }), SAMPLE_CONFIG);
+  assert.ok(totalsOf(cash.totals).includes('No HST (cash payment) = $0.00'));
+  assert.equal(cash.payment!.title, 'Payment method: Cash');
+  assert.deepEqual(totalsOf(cash.payment!.rows), ['Cash = Paid in cash — no HST is charged']);
+
+  const card = quoteDocument(quoteFixture({ overrides: { paymentMethod: 'card' } }), SAMPLE_CONFIG);
+  assert.equal(card.payment!.title, 'Payment method: Credit card');
+  assert.deepEqual(totalsOf(card.payment!.rows), ['Card payment = We accept: Visa, MasterCard, American Express']);
+  assert.ok(totalsOf(card.totals).some((r) => r.startsWith('HST 13%')));
+
+  // Not chosen: every method, as before.
+  assert.equal(quoteDocument(quoteFixture(), SAMPLE_CONFIG).payment!.title, 'Payment method: E-Transfer, VISA, MasterCard, Bank Transfer');
+});

@@ -98,6 +98,24 @@ export type SignatureType = (typeof SIGNATURE_TYPES)[number];
 export const QUOTE_ACTIVITY_EVENTS = ['client_link_created', 'client_link_revoked', 'quote_viewed', 'quote_accepted', 'quote_declined'] as const;
 export type QuoteActivityEvent = (typeof QUOTE_ACTIVITY_EVENTS)[number];
 
+// How the client will pay a quote. Null (not chosen) lists every method on
+// the PDF, as before this option existed.
+export const QUOTE_PAYMENT_METHODS = ['etransfer', 'card', 'bank_transfer', 'cash'] as const;
+export type QuotePaymentMethod = (typeof QUOTE_PAYMENT_METHODS)[number];
+export const QUOTE_PAYMENT_METHOD_LABELS: Record<QuotePaymentMethod, string> = {
+  etransfer: 'E-Transfer',
+  card: 'Credit card',
+  bank_transfer: 'Bank transfer',
+  cash: 'Cash',
+};
+
+// Harmony Production charges no HST on cash payments: a cash quote's tax
+// rate is always 0, whatever rate was typed. Used by the builder preview,
+// validation and the server's stored totals alike.
+export function effectiveTaxRateBp(paymentMethod: QuotePaymentMethod | null, taxRateBp: number): number {
+  return paymentMethod === 'cash' ? 0 : taxRateBp;
+}
+
 // A quote email is the quote's first one, or a resend.
 export const QUOTE_EMAIL_SEND_KINDS = ['first', 'resend'] as const;
 export type QuoteEmailSendKind = (typeof QUOTE_EMAIL_SEND_KINDS)[number];
