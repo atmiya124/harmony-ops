@@ -10,6 +10,10 @@ export function screenLevel(pathname: string): number {
   if (/^\/expenses\/[^/]+(\/edit)?\/?$/.test(pathname)) return 3;
   if (/^\/quotes\/[^/]+\/edit\/?$/.test(pathname)) return 3;
   if (/^\/(quotes|invoices)\/[^/]+\/?$/.test(pathname)) return 2; // a quote or invoice, or /quotes/new
+  // One partner: deeper than Finances' card pages (it opens from "Owed to
+  // partners"), shallower than the expenses it lists.
+  if (/^\/finances\/partners\/[^/]+\/?$/.test(pathname)) return 2.5;
+  if (/^\/finances\/(events|owed)\/?$/.test(pathname)) return 2; // a Finances card's details
   return 1; // Bookings, Today, Finances, Quotes, Invoices, the calculators
 }
 
@@ -22,11 +26,20 @@ export function parentOf(pathname: string): string {
   const expenseEdit = pathname.match(/^(\/expenses\/[^/]+)\/edit\/?$/);
   if (expenseEdit) return expenseEdit[1];
   if (/^\/expenses\/[^/]+\/?$/.test(pathname)) return '/finances';
+  if (/^\/finances\/partners\/[^/]+\/?$/.test(pathname)) return '/finances';
+  if (/^\/finances\/(events|owed)\/?$/.test(pathname)) return '/finances';
   const quoteEdit = pathname.match(/^(\/quotes\/[^/]+)\/edit\/?$/);
   if (quoteEdit) return quoteEdit[1];
   if (/^\/quotes\/[^/]+\/?$/.test(pathname)) return '/quotes';
   if (/^\/invoices\/[^/]+\/?$/.test(pathname)) return '/invoices';
   return '/';
+}
+
+// A screen opened from somewhere other than its usual parent can be told
+// where Back goes (`?from=/finances/owed`). Only in-app Finances paths are
+// accepted, so a crafted link can't send Back anywhere else.
+export function safeBackPath(from: string | null | undefined): string | null {
+  return from && !from.includes('..') && /^\/finances(\/[\w%.@-]+)*(\?[\w=&%.-]*)?$/.test(from) ? from : null;
 }
 
 // Two paths drawn by the same mounted screen: an expense and its Edit sheet,

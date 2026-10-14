@@ -1,11 +1,11 @@
 // Browser-side calls to the finance API. Errors carry the server's message
 // and per-field messages so forms can show them next to the right input.
-import type { AttachmentDto, ExpenseDetailDto, ExpenseDto, PartnerInfo } from './db/financeRepo';
+import type { AttachmentDto, ExpenseDetailDto, ExpenseDto, PartnerInfo, PartnerPaymentDto, PartnerSummaryDto } from './db/financeRepo';
 import type { ExpenseCategory, FundingSource, PaymentMethod, ReimbursementMethod } from './finance/types';
 import { invalidateCache, loadCached, peekCache } from './clientCache';
 import { ApiError, json, request } from './apiClient';
 
-export type { AttachmentDto, ExpenseDetailDto, ExpenseDto };
+export type { AttachmentDto, ExpenseDetailDto, ExpenseDto, PartnerPaymentDto, PartnerSummaryDto };
 export { ApiError };
 
 export interface PartnerOption extends PartnerInfo {
@@ -109,6 +109,19 @@ export interface ReimbursementFormValues {
 // record the same payment twice.
 export function addReimbursement(expenseId: string, id: string, values: ReimbursementFormValues): Promise<ExpenseDetailDto> {
   return changed(request(`/api/expenses/${expenseId}/reimbursements`, json('POST', { id, ...values })));
+}
+
+// One partner's page: spending, what they're owed, payment history.
+export const partnerKey = (email: string) => `expenses:partner:${email}`;
+
+export function getPartnerSummary(email: string): Promise<PartnerSummaryDto> {
+  return request(`/api/finance/partners/${encodeURIComponent(email)}`);
+}
+
+// Pays a partner back; the server applies it to their oldest outstanding
+// expenses first. `id` is made once per payment so a retry can't pay twice.
+export function recordPartnerPayment(email: string, id: string, values: ReimbursementFormValues): Promise<PartnerSummaryDto> {
+  return changed(request(`/api/finance/partners/${encodeURIComponent(email)}/payments`, json('POST', { id, ...values })));
 }
 
 export function voidReimbursement(expenseId: string, reimbursementId: string, reason: string): Promise<ExpenseDetailDto> {

@@ -178,3 +178,22 @@ export function accumulate(buckets: { label: string; value: number }[]): { label
 function sumWhere(entries: { date: string; cents: number }[], pred: (e: { date: string; cents: number }) => boolean): number {
   return entries.reduce((sum, e) => (pred(e) ? sum + e.cents : sum), 0);
 }
+
+// A range in a URL (`?range=2026-10` or `?range=3M`), so a screen opened
+// from a dashboard card shows the same period. Anything unreadable falls
+// back to the current month.
+export function rangeToParam(range: DateRange): string {
+  return isMonthRange(range) ? range.month : range;
+}
+
+export function rangeFromParam(param: string | null | undefined, today: string): DateRange {
+  if (param && DATE_RANGES.some((r) => r.key === param)) return param as PresetRangeKey;
+  if (param && /^\d{4}-(0[1-9]|1[0-2])$/.test(param) && param <= today.slice(0, 7)) return { month: param };
+  return { month: today.slice(0, 7) };
+}
+
+// "October 2026" for a month, otherwise the preset's name ("Last 3 months").
+export function rangeLabel(range: DateRange): string {
+  if (!isMonthRange(range)) return DATE_RANGES.find((r) => r.key === range)!.label;
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(parse(`${range.month}-01`));
+}

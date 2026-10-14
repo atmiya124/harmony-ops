@@ -128,8 +128,9 @@ export default function Screen({
   glowTitle?: boolean;
   // A smaller title, for a long one sharing the row with back + an action.
   compactTitle?: boolean;
-  // Show a back chevron to this screen's parent (nested screens only).
-  back?: boolean;
+  // Show a back chevron to this screen's parent (nested screens only), or
+  // to the given path when it was opened from elsewhere.
+  back?: boolean | string;
   // One round header action beside the avatar (e.g. "New booking").
   action?: React.ReactNode;
   // A gradient behind the top of the screen: soft slate-blue (true), or a
@@ -163,7 +164,7 @@ export default function Screen({
         <header className="relative mb-4 flex h-11 items-center pr-14">
           {back ? (
             <Link
-              href={parentOf(pathname)}
+              href={typeof back === 'string' ? back : parentOf(pathname)}
               aria-label="Back"
               className={`-ml-2 mr-0.5 flex size-10 shrink-0 items-center justify-center ${light ? 'text-[var(--ink)]' : 'text-white'}`}
             >

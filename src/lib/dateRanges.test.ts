@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accumulate, bucketize, comparedTo, currentPeriod, inPeriod, monthLabel, monthsSince, previousPeriod } from './dateRanges';
+import { accumulate, bucketize, comparedTo, currentPeriod, inPeriod, monthLabel, monthsSince, previousPeriod, rangeFromParam, rangeLabel, rangeToParam } from './dateRanges';
 
 test('current periods', () => {
   assert.deepEqual(currentPeriod({ month: '2026-09' }, '2026-09-28'), { start: '2026-09-01', end: '2026-09-28' });
@@ -93,4 +93,13 @@ test('accumulate produces a running total ending at the period sum', () => {
 test('ALL starts at the earliest entry', () => {
   const all = bucketize([{ date: '2025-11-10', cents: 500 }], 'ALL', '2026-02-01');
   assert.deepEqual(all.map((b) => b.label), ['Nov 2025', 'Dec 2025', 'Jan 2026', 'Feb 2026']);
+});
+
+test('ranges round-trip through a URL parameter; bad values fall back to this month', () => {
+  const today = '2026-10-14';
+  assert.deepEqual(rangeFromParam(rangeToParam({ month: '2026-09' }), today), { month: '2026-09' });
+  assert.equal(rangeFromParam(rangeToParam('3M'), today), '3M');
+  for (const bad of [null, '', 'nope', '2026-13', '2027-01']) assert.deepEqual(rangeFromParam(bad, today), { month: '2026-10' }, String(bad));
+  assert.equal(rangeLabel({ month: '2026-09' }), 'September 2026');
+  assert.equal(rangeLabel('YTD'), 'Year to date');
 });

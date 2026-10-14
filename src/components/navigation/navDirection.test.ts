@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { directionBetween, parentOf, sameScreen, screenLevel } from './navDirection';
+import { directionBetween, parentOf, safeBackPath, sameScreen, screenLevel } from './navDirection';
 
 test('screen depth', () => {
   assert.equal(screenLevel('/'), 0);
@@ -74,4 +74,31 @@ test('siblings crossfade', () => {
   assert.equal(directionBetween('/calculator', '/calculator/stage'), 'fade');
   assert.equal(directionBetween('/events/bookings', '/events/today'), 'fade');
   assert.equal(directionBetween('/finances', '/events/bookings'), 'fade');
+});
+
+test('a partner page sits under Finances, above the expenses it lists', () => {
+  const partner = '/finances/partners/a%40example.com';
+  assert.equal(screenLevel(partner), 2.5);
+  assert.equal(parentOf(partner), '/finances');
+  assert.equal(directionBetween('/finances', partner), 'forward');
+  assert.equal(directionBetween(partner, '/finances'), 'back');
+  assert.equal(directionBetween(partner, '/expenses/abc'), 'forward');
+});
+
+test("the Finances cards' detail pages sit under Finances", () => {
+  for (const page of ['/finances/events', '/finances/owed']) {
+    assert.equal(screenLevel(page), 2, page);
+    assert.equal(parentOf(page), '/finances', page);
+    assert.equal(directionBetween('/finances', page), 'forward', page);
+    assert.equal(directionBetween(page, '/expenses/abc'), 'forward', page);
+    assert.equal(directionBetween(page, '/finances/partners/a%40b.c'), 'forward', page);
+  }
+});
+
+test('Back can be pointed only at in-app Finances paths', () => {
+  assert.equal(safeBackPath('/finances/owed'), '/finances/owed');
+  assert.equal(safeBackPath('/finances/events?range=2026-10'), '/finances/events?range=2026-10');
+  for (const bad of [null, '', 'https://evil.example', '//evil.example', '/quotes', '/finances/../login', 'javascript:alert(1)']) {
+    assert.equal(safeBackPath(bad), null, String(bad));
+  }
 });

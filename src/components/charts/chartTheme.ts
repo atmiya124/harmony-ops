@@ -7,11 +7,14 @@ import { useSyncExternalStore } from 'react';
 // position, so a metric keeps its color everywhere it appears.
 //
 // These are the app's neon hues stepped down into the dark-mode data band
-// (OKLCH L 0.48–0.67), validated against the card surface #0a0f16:
-// ≥3:1 contrast, adjacent colour-blind ΔE ≥ 19.8, normal-vision ΔE ≥ 30.8.
+// (OKLCH L 0.48–0.67), validated against the card surface #0a0f16 for
+// *every* pair, not just neighbours (a split ring or stacked bar can put any
+// two side by side): ≥3:1 contrast, normal-vision ΔE ≥ 17.4, colour-blind
+// ΔE ≥ 6.9 (green↔orange — legal only where parts are also gapped and labelled).
+// The green was #059669 until it proved too close to the cyan (ΔE 11.8).
 // The brighter --neon-* tokens stay for text/UI accents; they are too light
 // for filled data marks. Order matters: assign in this order, never cycle.
-export const CATEGORICAL = ['#0891b2', '#ea580c', '#8b5cf6', '#059669'] as const;
+export const CATEGORICAL = ['#0891b2', '#ea580c', '#8b5cf6', '#16a34a'] as const;
 
 export const SERIES = {
   total: CATEGORICAL[0],

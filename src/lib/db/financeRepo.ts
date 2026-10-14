@@ -13,6 +13,7 @@ import type { AuditAction, AuditEntityType, ExpenseCategory } from '../finance/t
 import type { ExpenseInput, ExpenseUpdate, ReimbursementInput } from '../schemas/finance';
 import { activeStorage, storageFor, type StorageProvider, type StoredFile } from '../storage/receipts';
 import type { ReceiptFileType } from '../storage/fileType';
+import { formatCents } from '../money';
 
 export interface Actor {
   id: string;
@@ -70,10 +71,10 @@ export interface PartnerInfo {
   image: string | null;
 }
 
-export async function listPartners(): Promise<PartnerInfo[]> {
+export async function listPartners(reader: Tx | typeof db = db): Promise<PartnerInfo[]> {
   const emails = [...getPartnerEmails()];
   if (emails.length === 0) return [];
-  const users = await db.select({ email: authUser.email, name: authUser.name, image: authUser.image }).from(authUser).where(inArray(authUser.email, emails));
+  const users = await reader.select({ email: authUser.email, name: authUser.name, image: authUser.image }).from(authUser).where(inArray(authUser.email, emails));
   const byEmail = new Map(users.map((u) => [normalizeEmail(u.email), u]));
   return emails
     .map((email) => ({ email, name: partnerDisplayName(email, byEmail.get(email)?.name), image: byEmail.get(email)?.image ?? null }))
@@ -495,6 +496,167 @@ export async function voidReimbursement(expenseId: string, reimbursementId: stri
       .returning();
     await audit(tx, { entityType: 'reimbursement', entityId: reimbursementId, action: 'void', actor, before, after, at });
     return (await getExpenseDetail(expenseId, tx))!;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// One partner: what they've spent and been paid back
+// ---------------------------------------------------------------------------
+
+// A payment back to the partner, as the partner page lists it. One
+// recorded payment that covered several expenses is one row here; its
+// `parts` are the per-expense reimbursement rows it was split into.
+export interface PartnerPaymentDto {
+  key: string;
+  amountCents: number;
+  reimbursedOn: string;
+  method: ReimbursementRow['method'];
+  notes: string | null;
+  recordedByEmail: string;
+  createdAt: string;
+  voided: boolean;
+  voidReason: string | null;
+  parts: { reimbursementId: string; expenseId: string; category: ExpenseCategory; expenseDate: string; amountCents: number }[];
+}
+
+export interface PartnerSummaryDto {
+  partner: PartnerInfo;
+  spentCents: number; // all their (non-deleted) expenses, any funding
+  personalCents: number; // paid with their own money (what can be owed back)
+  companyCents: number; // paid with company money (company card etc.) — never owed
+  reimbursedCents: number; // live payments back to them
+  owedCents: number; // still to be paid back
+  expenseCount: number;
+  byCategory: { category: ExpenseCategory; cents: number }[];
+  byMethod: { method: ExpenseRow['paymentMethod']; cents: number }[];
+  payments: PartnerPaymentDto[]; // newest first, voided ones included
+}
+
+export async function getPartnerSummary(email: string, reader: Tx | typeof db = db): Promise<PartnerSummaryDto | null> {
+  const partnerEmail = normalizeEmail(email);
+  const partner = (await listPartners(reader)).find((p) => p.email === partnerEmail);
+  if (!partner) return null;
+  const rows = await reader.select().from(expenses).where(and(eq(expenses.paidByEmail, partnerEmail), isNull(expenses.deletedAt)));
+  const list = await hydrate(rows, reader);
+  const byId = new Map(list.map((e) => [e.id, e]));
+  const paymentRows = list.length
+    ? await reader.select().from(reimbursements).where(inArray(reimbursements.expenseId, list.map((e) => e.id)))
+    : [];
+
+  const categories = new Map<ExpenseCategory, number>();
+  for (const e of list) categories.set(e.category, (categories.get(e.category) ?? 0) + e.amountCents);
+  const methods = new Map<ExpenseRow['paymentMethod'], number>();
+  for (const e of list) methods.set(e.paymentMethod, (methods.get(e.paymentMethod) ?? 0) + e.amountCents);
+
+  // Rows written by one recorded payment share its moment, recorder, date,
+  // method and notes — group them back into that one payment.
+  const groups = new Map<string, PartnerPaymentDto>();
+  for (const r of paymentRows) {
+    const key = [r.createdAt, r.recordedByEmail, r.reimbursedOn, r.method, r.notes ?? '', r.voidedAt ? 'void' : 'live'].join('|');
+    const expense = byId.get(r.expenseId)!;
+    const group = groups.get(key) ?? {
+      key: r.id,
+      amountCents: 0,
+      reimbursedOn: r.reimbursedOn,
+      method: r.method,
+      notes: r.notes,
+      recordedByEmail: r.recordedByEmail,
+      createdAt: r.createdAt,
+      voided: Boolean(r.voidedAt),
+      voidReason: r.voidReason,
+      parts: [],
+    };
+    group.amountCents += r.amountCents;
+    group.parts.push({ reimbursementId: r.id, expenseId: r.expenseId, category: expense.category, expenseDate: expense.expenseDate, amountCents: r.amountCents });
+    groups.set(key, group);
+  }
+
+  return {
+    partner,
+    spentCents: list.reduce((s, e) => s + e.amountCents, 0),
+    personalCents: list.filter((e) => e.fundingSource === 'personal').reduce((s, e) => s + e.amountCents, 0),
+    companyCents: list.filter((e) => e.fundingSource === 'company').reduce((s, e) => s + e.amountCents, 0),
+    reimbursedCents: list.reduce((s, e) => s + e.reimbursement.reimbursedCents, 0),
+    owedCents: list.reduce((s, e) => s + e.reimbursement.outstandingCents, 0),
+    expenseCount: list.length,
+    byCategory: [...categories.entries()].map(([category, cents]) => ({ category, cents })).sort((a, b) => b.cents - a.cents),
+    byMethod: [...methods.entries()].map(([method, cents]) => ({ method, cents })).sort((a, b) => b.cents - a.cents),
+    payments: [...groups.values()].sort((a, b) => (b.reimbursedOn + b.createdAt).localeCompare(a.reimbursedOn + a.createdAt)),
+  };
+}
+
+// A stable id for the n-th part of a payment (part 0 is the payment's own
+// id), so a retried request makes exactly the same rows — or none.
+function partId(paymentId: string, n: number): string {
+  if (n === 0) return paymentId;
+  const h = createHash('sha256').update(`${paymentId}:${n}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+// Pays a partner back an amount, applied to their oldest outstanding
+// expenses first (each part is an ordinary reimbursement on that expense,
+// with the same rules). Only expenses dated on or before the payment
+// count — a payment can't be dated before the expense it covers.
+export async function recordPartnerPayment(email: string, input: ReimbursementInput, actor: Actor): Promise<PartnerSummaryDto> {
+  const partnerEmail = normalizeEmail(email);
+  return db.transaction(async (tx) => {
+    if (!getPartnerEmails().has(partnerEmail)) throw new FinanceError(404, 'Partner not found');
+
+    // Retried request: the payment is already there, so don't pay twice.
+    const [existing] = await tx.select().from(reimbursements).where(eq(reimbursements.id, input.id));
+    if (existing) {
+      if (existing.recordedByUserId === actor.id) return (await getPartnerSummary(partnerEmail, tx))!;
+      throw new FinanceError(409, 'A payment with this id already exists');
+    }
+
+    // Read inside the write transaction, so two partners recording at once
+    // can't together pay more than is owed.
+    const rows = await tx
+      .select()
+      .from(expenses)
+      .where(and(eq(expenses.paidByEmail, partnerEmail), isNull(expenses.deletedAt), eq(expenses.reimbursable, true)))
+      .orderBy(expenses.expenseDate, expenses.createdAt);
+    const payments = rows.length ? await tx.select().from(reimbursements).where(inArray(reimbursements.expenseId, rows.map((r) => r.id))) : [];
+    const owing = rows
+      .map((r) => ({ row: r, outstanding: reimbursementState(r, payments.filter((p) => p.expenseId === r.id)).outstandingCents }))
+      .filter((o) => o.outstanding > 0);
+    const totalOwed = owing.reduce((s, o) => s + o.outstanding, 0);
+    const eligible = owing.filter((o) => o.row.expenseDate <= input.reimbursedOn);
+    const eligibleOwed = eligible.reduce((s, o) => s + o.outstanding, 0);
+
+    if (totalOwed === 0) throw new FinanceError(422, 'Nothing is owed to this partner', { amountCents: ['Nothing is owed'] });
+    if (input.amountCents > totalOwed) {
+      throw new FinanceError(422, `Only ${formatCents(totalOwed)} is owed`, { amountCents: [`Only ${formatCents(totalOwed)} is owed`] });
+    }
+    if (input.amountCents > eligibleOwed) {
+      const msg = `Only ${formatCents(eligibleOwed)} is owed for expenses on or before ${input.reimbursedOn}; date the payment later to cover newer ones`;
+      throw new FinanceError(422, msg, { reimbursedOn: [msg] });
+    }
+
+    const at = nowIso();
+    let left = input.amountCents;
+    let n = 0;
+    for (const { row, outstanding } of eligible) {
+      if (left === 0) break;
+      const part = Math.min(left, outstanding);
+      const [created] = await tx
+        .insert(reimbursements)
+        .values({
+          id: partId(input.id, n++),
+          expenseId: row.id,
+          amountCents: part,
+          reimbursedOn: input.reimbursedOn,
+          method: input.method,
+          notes: input.notes,
+          recordedByUserId: actor.id,
+          recordedByEmail: actor.email,
+          createdAt: at,
+        })
+        .returning();
+      await audit(tx, { entityType: 'reimbursement', entityId: created.id, action: 'create', actor, before: null, after: created, at });
+      left -= part;
+    }
+    return (await getPartnerSummary(partnerEmail, tx))!;
   });
 }
 

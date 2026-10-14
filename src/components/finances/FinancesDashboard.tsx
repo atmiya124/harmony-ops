@@ -1,27 +1,28 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronRight, Plus } from 'lucide-react';
 import AreaTrend from '@/components/charts/AreaTrend';
 import ColumnTrend from '@/components/charts/ColumnTrend';
-import BreakdownBars from '@/components/charts/BreakdownBars';
+import CategoryBars from './CategoryBars';
 import RangeTabs from '@/components/charts/RangeTabs';
 import { ChangeIndicator, ChartCard } from '@/components/charts/ChartCard';
 import { SERIES } from '@/components/charts/chartTheme';
 import ExpenseList from '@/components/expenses/ExpenseList';
-import { CATEGORY_META } from '@/components/expenses/categoryMeta';
+import { partnerLabel } from '@/components/expenses/partnerLabel';
 import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import ErrorState from '@/components/ui/ErrorState';
 import { DASHBOARD_EXPENSES_FILTER, expensesKey, FINANCE_PARTNERS_KEY, getPartners, listExpenses } from '@/lib/financeApi';
 import { useCachedData } from '@/hooks/useCachedData';
-import { accumulate, bucketize, comparedTo, currentPeriod, inPeriod, isMonthRange, monthsSince, previousPeriod, type DateRange } from '@/lib/dateRanges';
+import { accumulate, bucketize, comparedTo, currentPeriod, inPeriod, isMonthRange, monthsSince, previousPeriod, rangeToParam, type DateRange } from '@/lib/dateRanges';
 import { formatCents, formatCentsWhole, percentChange } from '@/lib/money';
 import { todayLocal } from '@/lib/finance/dates';
 import { EXPENSE_CATEGORIES } from '@/lib/finance/types';
 
 // The Finances tab: what the company spent over a period, where it went,
-// and what's still owed back to partners. Every card follows the range
-// pills. Totals are money out (tax included); reimbursements are payments
+// what each partner spent and is owed (each opens their own page). Every
+// card follows the range pills. Totals are money out (tax included); reimbursements are payments
 // against expenses, never extra spending, so they don't change any total.
 export default function FinancesDashboard() {
   const { version, openNewExpense } = useExpenseEntry();
@@ -51,14 +52,24 @@ export default function FinancesDashboard() {
     const owed = all.filter((e) => e.reimbursement.outstandingCents > 0).map((e) => ({ date: e.date, cents: e.reimbursement.outstandingCents }));
 
     const byCategory = EXPENSE_CATEGORIES.map((c) => ({
-      label: CATEGORY_META[c].label,
-      value: inRange.filter((e) => e.category === c).reduce((s, e) => s + e.cents, 0),
+      category: c,
+      cents: inRange.filter((e) => e.category === c).reduce((s, e) => s + e.cents, 0),
     }))
-      .filter((c) => c.value > 0)
-      .sort((a, b) => b.value - a.value);
+      .filter((c) => c.cents > 0)
+      .sort((a, b) => b.cents - a.cents);
+
+    // What each partner paid for in the period, split by whose money it was.
+    const spentBy = new Map<string, { own: number; company: number }>();
+    for (const e of inRange) {
+      const s = spentBy.get(e.paidByEmail) ?? { own: 0, company: 0 };
+      if (e.fundingSource === 'company') s.company += e.cents;
+      else s.own += e.cents;
+      spentBy.set(e.paidByEmail, s);
+    }
 
     return {
       total,
+      spentBy,
       change: previousTotal === null ? null : percentChange(total, previousTotal),
       months: bucketize(all, '1Y', today),
       eventTotal: inRange.filter((e) => e.bookingId !== null).reduce((s, e) => s + e.cents, 0),
@@ -69,7 +80,15 @@ export default function FinancesDashboard() {
     };
   }, [expenses, range, today]);
 
-  const owedPartners = partners.filter((p) => p.outstandingCents > 0).sort((a, b) => b.outstandingCents - a.outstandingCents);
+  const spentTotal = (email: string) => {
+    const s = view?.spentBy.get(email);
+    return s ? s.own + s.company : 0;
+  };
+  // Only partners who spent something this period (most first) — plus anyone
+  // still owed money, so their page (and Record payment) stays one tap away.
+  const partnersBySpend = partners
+    .filter((p) => spentTotal(p.email) > 0 || p.outstandingCents > 0)
+    .sort((a, b) => spentTotal(b.email) - spentTotal(a.email) || b.outstandingCents - a.outstandingCents);
   const rangeComparedTo = comparedTo(range, today);
   // From the first recorded expense up to this month.
   const earliest = expenses?.reduce((min, e) => (e.expenseDate < min ? e.expenseDate : min), today) ?? today;
@@ -110,31 +129,41 @@ export default function FinancesDashboard() {
           />
 
           <div className="grid grid-cols-2 gap-3">
-            <ChartCard title="Event expenses" value={formatCentsWhole(view.eventTotal)}>
+            <ChartCard title="Event expenses" value={formatCentsWhole(view.eventTotal)} href={`/finances/events?range=${rangeToParam(range)}`}>
               <AreaTrend data={view.eventTrend} color={SERIES.event} label="Event expenses over the period" height={56} />
             </ChartCard>
-            <ChartCard title="Owed to partners" value={formatCents(view.owedTotal)}>
+            <ChartCard title="Owed to partners" value={formatCents(view.owedTotal)} href="/finances/owed">
               <AreaTrend data={view.owedTrend} color={SERIES.reimbursement} label="Outstanding reimbursements by expense date" height={56} />
             </ChartCard>
           </div>
 
-          {owedPartners.length > 0 ? (
+          {partnersBySpend.length > 0 ? (
+            // Each partner opens their own page: history and paying them back.
             <div className="rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] p-4">
-              <p className="mb-2 text-xs text-[var(--flat-text-faint)]">Pending reimbursements</p>
+              <p className="mb-1 text-xs text-[var(--flat-text-faint)]">Partners · spent this period</p>
               <ul className="divide-y divide-[var(--flat-border)]">
-                {owedPartners.map((p) => (
-                  <li key={p.email} className="flex items-center justify-between py-2.5">
-                    <span className="text-sm text-white">{p.name ?? p.email.split('@')[0]}</span>
-                    <span className="text-sm font-bold tabular-nums text-white">{formatCents(p.outstandingCents)}</span>
-                  </li>
-                ))}
+                {partnersBySpend.map((p) => {
+                  const spent = view.spentBy.get(p.email) ?? { own: 0, company: 0 };
+                  return (
+                    <li key={p.email}>
+                      <Link href={`/finances/partners/${encodeURIComponent(p.email)}`} className="flex items-center gap-3 py-3">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-sm font-bold text-white">{partnerLabel(p).charAt(0)}</span>
+                        <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-white">{partnerLabel(p)}</span>
+                        <span className="shrink-0 text-[15px] font-bold tabular-nums text-white">{formatCents(spent.own + spent.company)}</span>
+                        <ChevronRight size={16} className="shrink-0 text-white/30" />
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}
 
           {view.byCategory.length > 0 ? (
             <ChartCard title="By category" value={formatCentsWhole(view.total)}>
-              <BreakdownBars data={view.byCategory} label="Expenses by category for the period" color={SERIES.total} />
+              <div className="mt-3">
+                <CategoryBars data={view.byCategory} totalCents={view.total} caption="Expenses by category for the period" />
+              </div>
             </ChartCard>
           ) : null}
         </>
