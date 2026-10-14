@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { documentFileName, invoiceDocument, quoteDocument, splitTerms, termsPlacement } from './documentModel';
+import { documentFileName, invoiceDocument, quoteDocument, signedAcceptance, splitTerms, termsPlacement } from './documentModel';
+import type { DocumentAcceptance } from '../db/clientLinkRepo';
 import { BLANK_CONFIG, invoiceFixture, quoteFixture, SAMPLE_CONFIG } from './testFixtures';
 
 const totalsOf = (rows: { label: string; value: string }[]) => rows.map((r) => `${r.label} = ${r.value}`);
@@ -229,4 +230,32 @@ test('terms go beside the totals only when payment details are off and they fit'
   const longDoc = quoteDocument(quoteFixture({ overrides: { showPaymentDetails: false, terms: long.join('\n') } }), SAMPLE_CONFIG);
   assert.equal(longDoc.termsPlacement, 'section');
   assert.equal(longDoc.terms.length, 12);
+});
+
+// A client acceptance as stored by the client link (Phase 3).
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+function accepted(quote: ReturnType<typeof quoteFixture>, over: Partial<DocumentAcceptance> = {}): DocumentAcceptance {
+  return { customerName: 'Michael Smith', customerTitle: 'Event Director', signatureType: 'typed', signatureData: 'Michael Smith', quoteTotalCents: quote.totalCents, acceptedAt: '2026-10-13T19:05:00.000Z', ...over };
+}
+
+test('an online acceptance fills in the customer signature block', () => {
+  const quote = quoteFixture({ overrides: { status: 'accepted' } });
+  const typed = quoteDocument(quote, SAMPLE_CONFIG, accepted(quote)).acceptance!.signed;
+  assert.deepEqual(typed, { name: 'Michael Smith', title: 'Event Director', date: '13 Oct, 2026', acceptedAt: '13 Oct, 2026, 3:05 p.m.', signature: { kind: 'typed', text: 'Michael Smith' } });
+
+  const drawn = signedAcceptance(quote, accepted(quote, { signatureType: 'drawn', signatureData: PNG, customerTitle: null }));
+  assert.deepEqual(drawn?.signature, { kind: 'drawn', image: PNG });
+  assert.equal(drawn?.title, null);
+
+  // Missing or unreadable signature data: the rest still prints.
+  assert.equal(signedAcceptance(quote, accepted(quote, { signatureData: null }))?.signature, null);
+  assert.equal(signedAcceptance(quote, accepted(quote, { signatureType: 'drawn', signatureData: 'https://evil.example/x.png' }))?.signature, null);
+});
+
+test('no acceptance, or one that no longer matches the quote, leaves the lines blank', () => {
+  const quote = quoteFixture({ overrides: { status: 'accepted' } });
+  assert.equal(quoteDocument(quote, SAMPLE_CONFIG).acceptance!.signed, null);
+  assert.equal(signedAcceptance(quoteFixture({ overrides: { status: 'draft' } }), accepted(quote)), null);
+  assert.equal(signedAcceptance(quote, accepted(quote, { quoteTotalCents: quote.totalCents + 100 })), null);
+  assert.ok(signedAcceptance(quoteFixture({ overrides: { status: 'converted' } }), accepted(quote)));
 });

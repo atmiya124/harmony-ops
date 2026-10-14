@@ -112,9 +112,15 @@ export default function Screen({
   backdrop = false,
   section,
   tone = 'dark',
+  leading,
+  subtitle,
   children,
 }: {
   title: string;
+  // Shown before the title, e.g. a customer avatar on a quote.
+  leading?: React.ReactNode;
+  // Quieter text after the title on wider screens ("AAPL  Apple Inc").
+  subtitle?: string;
   // Keep the title for screen readers only (e.g. a detail page whose hero
   // already shows the name).
   hideTitle?: boolean;
@@ -164,19 +170,35 @@ export default function Screen({
               <ChevronLeft size={28} />
             </Link>
           ) : null}
+          {leading && !hideTitle ? <span className="mr-3 flex shrink-0 items-center">{leading}</span> : null}
           <h1
             className={
               hideTitle
                 ? 'sr-only'
-                : `truncate ${compactTitle ? 'text-[20px] font-semibold' : 'text-[28px] font-bold'} leading-none tracking-tight ${glowTitle ? TITLE_GLOW : light ? 'text-[var(--ink)]' : 'text-white'}`
+                : `min-w-0 truncate ${compactTitle ? 'text-[20px] font-semibold' : 'text-[28px] font-bold'} leading-none tracking-tight ${glowTitle ? TITLE_GLOW : light ? 'text-[var(--ink)]' : 'text-white'}`
             }
           >
             {title}
+            {subtitle ? <span className={`ml-2 hidden font-normal sm:inline ${light ? 'text-[var(--ink-2)]' : 'text-white/60'}`}>{subtitle}</span> : null}
           </h1>
-          {action ? <div className="ml-auto flex shrink-0 items-center pl-3">{action}</div> : null}
+          {action || (light && tabs) ? (
+            <div className="ml-auto flex shrink-0 items-center gap-2 pl-3">
+              {action}
+              {/* Light screens on desktop: the tabs sit in the header row, after the actions. */}
+              {light && tabs ? (
+                <div className="hidden md:block">
+                  <SectionTabs tabs={[...tabs.tabs]} label={tabs.label} tone={tone} inline />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </header>
         {/* Section tabs travel with their screen, so they slide in with it. */}
-        {tabs ? <SectionTabs tabs={[...tabs.tabs]} label={tabs.label} tone={tone} /> : null}
+        {tabs ? (
+          <div className={light ? 'md:hidden' : undefined}>
+            <SectionTabs tabs={[...tabs.tabs]} label={tabs.label} tone={tone} />
+          </div>
+        ) : null}
         {/* Positioned so it paints above the (absolute) backdrop gradient. */}
         {backdrop ? <div className="relative">{children}</div> : children}
         </div>

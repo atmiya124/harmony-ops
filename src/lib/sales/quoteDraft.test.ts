@@ -13,12 +13,12 @@ function filled(): QuoteDraft {
   return d;
 }
 
-test('a new draft uses the defaults: 13% HST, 50% deposit, valid 30 days', () => {
+test('a new draft uses the defaults: 13% HST, 30% deposit, valid 30 days', () => {
   const d = blankDraft(QUOTE_DEFAULTS, '2026-10-13');
   assert.equal(d.validUntil, '2026-11-12');
   assert.equal(d.taxRate, '13');
   assert.equal(d.depositType, 'percent');
-  assert.equal(d.depositValue, '50');
+  assert.equal(d.depositValue, '30');
 });
 
 test('draft to API values: trimmed, cents and basis points, sections flattened in order', () => {
@@ -27,7 +27,7 @@ test('draft to API values: trimmed, cents and basis points, sections flattened i
   assert.equal(values!.customerName, 'Michael Smith');
   assert.equal(values!.customerCompany, null);
   assert.equal(values!.taxRateBp, 1300);
-  assert.equal(values!.depositValue, 5000);
+  assert.equal(values!.depositValue, 3000);
   assert.deepEqual(
     values!.items.map((i) => [i.section, i.itemName, i.quantity, i.unitPriceCents, i.description]),
     [
@@ -42,7 +42,7 @@ test('live preview matches the calculator', () => {
   assert.equal(t.subtotalCents, 276000);
   assert.equal(t.taxCents, 35880);
   assert.equal(t.totalCents, 311880);
-  assert.equal(t.depositRequiredCents, 155940);
+  assert.equal(t.depositRequiredCents, 93564); // 30% of the total
 });
 
 test('half-typed values count as zero in the preview but block saving', () => {

@@ -3,11 +3,14 @@
 import { use, useEffect, useState } from 'react';
 import Screen from '@/components/navigation/Screen';
 import QuoteDetail from '@/components/sales/QuoteDetail';
-import { LoadError } from '@/components/sales/ui';
+import { QuoteHeaderActions } from '@/components/sales/QuoteActions';
+import { Avatar, LoadError } from '@/components/sales/ui';
 import { peekCache } from '@/lib/clientCache';
 import { getQuote, quoteKey, type QuoteDto } from '@/lib/quotesApi';
 
-function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
+// The header carries the quote itself ("Q-000000218  Michael Smith") and
+// its PDF actions, so the screen is drawn once the quote is known.
+export default function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   // Just saved or opened before: show the cached copy at once, then refresh.
   const [quote, setQuote] = useState<QuoteDto | null>(() => peekCache<QuoteDto>(quoteKey(id)) ?? null);
@@ -19,15 +22,23 @@ function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load the quote.'));
   }, [id]);
 
-  if (error && !quote) return <LoadError message={error} />;
-  if (!quote) return <div className="h-40 animate-pulse rounded-xl bg-[var(--paper-sunk)]" aria-busy="true" />;
-  return <QuoteDetail quote={quote} onChange={setQuote} />;
-}
-
-export default function Page(props: React.ComponentProps<typeof QuoteDetailPage>) {
   return (
-    <Screen title="Quote" back tone="light">
-      <QuoteDetailPage {...props} />
+    <Screen
+      title={quote ? quote.quoteNumber : 'Quote'}
+      subtitle={quote?.customerName}
+      leading={quote ? <Avatar name={quote.customerName} size={36} /> : null}
+      compactTitle
+      back
+      tone="light"
+      action={quote ? <QuoteHeaderActions quote={quote} onChange={setQuote} /> : null}
+    >
+      {error && !quote ? (
+        <LoadError message={error} />
+      ) : !quote ? (
+        <div className="h-40 animate-pulse rounded-2xl bg-[var(--paper-sunk)]" aria-busy="true" />
+      ) : (
+        <QuoteDetail quote={quote} onChange={setQuote} />
+      )}
     </Screen>
   );
 }

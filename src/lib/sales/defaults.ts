@@ -24,12 +24,14 @@ export const QUOTE_DEFAULTS: QuoteDefaults = {
   discountType: 'none',
   discountValue: 0,
   depositType: 'percent',
-  depositValue: 5000, // 50%
+  depositValue: 3000, // 30%, as the payment term below says
   terms: [
-    'A 50% non-refundable deposit is required to confirm the booking. The remaining balance is due 3 days before the event date.',
-    'Prices quoted are valid for 30 days from the quote date and are subject to equipment availability at the time of booking.',
-    'The client is responsible for providing safe venue access, an adequate power supply and any permits required by the venue.',
-    'Cancellations made less than 14 days before the event will be charged 50% of the total quoted amount.',
-    'Any damage to equipment caused by guests or venue staff will be charged to the client at repair or replacement cost.',
+    'Payment: A 30% non-refundable deposit is required to secure your booking. The remaining 70% balance must be paid in full on the day of the event.',
+    'Cancellations: Deposits are non-refundable. Cancellations made within 7 days of the event may be charged in full.',
+    'Changes: Any additional requests or changes may incur extra charges.',
+    'Equipment: Client is responsible for all rented equipment (damage/loss billed).',
+    'Setup: Client must provide proper access, power, and safe working conditions. Delays may result in extra fees.',
+    'Liability: Not responsible for delays due to factors beyond our control (e.g., weather, power issues).',
+    'Acceptance: Payment confirms agreement to these terms.',
   ].join('\n'),
 };

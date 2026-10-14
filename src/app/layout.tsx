@@ -9,7 +9,7 @@ import ProfileMenu from '@/components/auth/ProfileMenu';
 import ExpenseEntryProvider from '@/components/expenses/ExpenseEntryProvider';
 import NavDirectionTracker from '@/components/navigation/NavDirectionTracker';
 import { getCurrentPartner } from '@/lib/auth/session';
-import { LOGIN_PATH, PATHNAME_HEADER } from '@/lib/auth/constants';
+import { isPublicClientPath, LOGIN_PATH, PATHNAME_HEADER } from '@/lib/auth/constants';
 
 const roboto = Roboto({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-roboto' });
 
@@ -24,8 +24,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // cookie whose session is expired, revoked, or no longer on the allowlist.
   const path = (await headers()).get(PATHNAME_HEADER) ?? '';
   const isLoginPage = path === LOGIN_PATH || path.startsWith(`${LOGIN_PATH}?`);
+  // A client opening their quote link: no sign-in, and none of the staff app
+  // around it (navigation, account menu), even if a partner opens the link.
+  const isClientPage = isPublicClientPath(path);
   const partner = await getCurrentPartner();
-  if (!partner && !isLoginPage) redirect(path && path !== '/' ? `${LOGIN_PATH}?next=${encodeURIComponent(path)}` : LOGIN_PATH);
+  if (!partner && !isLoginPage && !isClientPage) redirect(path && path !== '/' ? `${LOGIN_PATH}?next=${encodeURIComponent(path)}` : LOGIN_PATH);
 
   return (
     // data-scroll-behavior: Next turns the CSS smooth scrolling off while it
@@ -36,7 +39,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <AppFrame>
           <div className="pointer-events-none absolute -left-24 -bottom-24 size-96 rounded-full bg-white opacity-[0.01] blur-[110px]" />
           <div className="pointer-events-none absolute left-1/2 -top-48 size-96 -translate-x-1/2 rounded-full bg-white opacity-[0.01] blur-[110px]" />
-          {partner && !isLoginPage ? (
+          {isClientPage ? (
+            <main className="relative">{children}</main>
+          ) : partner && !isLoginPage ? (
             <>
               {/* Top-right account button, level with each page's title. */}
               <header className="absolute right-4 top-4 z-40" style={{ viewTransitionName: 'app-header' }}>

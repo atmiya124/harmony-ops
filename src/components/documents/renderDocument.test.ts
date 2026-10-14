@@ -115,3 +115,26 @@ test('unset company details leave no empty labels or placeholder text', () => {
   const html = markup(renderDocumentHtml(quoteDocument(quoteFixture(), BLANK_CONFIG)));
   assert.doesNotMatch(html, /null|undefined|example\.com|<p><\/p>/);
 });
+
+test('a quote accepted online prints the client signature, name, title and time', () => {
+  const quote = quoteFixture({ overrides: { status: 'accepted' } });
+  const base = { customerName: 'Michael <b>Smith</b>', customerTitle: 'Event Director', quoteTotalCents: quote.totalCents, acceptedAt: '2026-10-13T19:05:00.000Z' };
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+  const drawn = markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG, { ...base, signatureType: 'drawn', signatureData: png })));
+  for (const text of ['Accepted online · 13 Oct, 2026, 3:05 p.m.', `<img class="sig-image" src="${png}"`, 'Michael &lt;b&gt;Smith&lt;/b&gt;', 'Event Director', 'box checked']) {
+    assert.ok(drawn.includes(text), text);
+  }
+  assert.ok(!drawn.includes('Sign and return'));
+
+  const typed = markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG, { ...base, customerTitle: null, signatureType: 'typed', signatureData: 'Michael Smith' })));
+  assert.ok(typed.includes('<span class="sig-typed">Michael Smith</span>'));
+  assert.ok(typed.includes('(typed)'));
+  assert.ok(!typed.includes('Event Director'));
+
+  const missing = markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG, { ...base, signatureType: 'drawn', signatureData: null })));
+  assert.ok(missing.includes('Signature on file unavailable'));
+
+  // Not accepted online: the blank sign-and-return lines.
+  assert.ok(markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG))).includes('Sign and return'));
+});

@@ -5,12 +5,12 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { db } from './client';
-import { bookings, financeSettings, invoices, quoteItems, quotes, salesAuditLog, type QuoteItemRow, type QuoteRow } from './schema';
+import { bookings, financeSettings, invoices, quoteAccessLinks, quoteEmailSends, quoteItems, quotes, salesAuditLog, type QuoteItemRow, type QuoteRow } from './schema';
 import { FinanceError, nextTimestamp, nowIso, type Actor, type Tx } from './financeRepo';
 import { nextDocumentNumber } from './documentNumbers';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { QUOTE_DEFAULTS, type QuoteDefaults } from '../sales/defaults';
-import { canSetQuoteStatus, isQuoteEditable, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteStatus, type SalesAuditAction } from '../sales/types';
+import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteEmailSendKind, type QuoteStatus, type SalesAuditAction } from '../sales/types';
 import type { QuoteCreateInput, QuoteStatusInput, QuoteUpdateInput } from '../schemas/quote';
 
 // ---------------------------------------------------------------------------
@@ -79,6 +79,15 @@ export interface QuoteDto extends QuoteSummaryDto {
   updatedByEmail: string;
   items: QuoteItemDto[];
   invoices: { id: string; invoiceNumber: string; status: InvoiceStatus }[];
+  emailSends: QuoteEmailSendDto[]; // newest first
+}
+
+// One email of this quote that the provider accepted (see quote_email_sends).
+export interface QuoteEmailSendDto {
+  recipientEmail: string;
+  kind: QuoteEmailSendKind;
+  sentByEmail: string;
+  sentAt: string;
 }
 
 function toSummary(r: QuoteRow): QuoteSummaryDto {
@@ -234,7 +243,7 @@ export async function listQuotes(): Promise<QuoteSummaryDto[]> {
 export async function getQuote(id: string, reader: Tx | typeof db = db): Promise<QuoteDto | null> {
   const [row] = await reader.select().from(quotes).where(and(eq(quotes.id, id), isNull(quotes.deletedAt)));
   if (!row) return null;
-  const [items, booking, linkedInvoices] = await Promise.all([
+  const [items, booking, linkedInvoices, sends] = await Promise.all([
     reader.select().from(quoteItems).where(eq(quoteItems.quoteId, id)).orderBy(asc(quoteItems.sortOrder)),
     row.eventId !== null
       ? reader.select({ id: bookings.id, title: bookings.eventTitle, eventDate: bookings.eventDate }).from(bookings).where(eq(bookings.id, row.eventId))
@@ -244,6 +253,11 @@ export async function getQuote(id: string, reader: Tx | typeof db = db): Promise
       .from(invoices)
       .where(and(eq(invoices.quoteId, id), isNull(invoices.deletedAt)))
       .orderBy(asc(invoices.invoiceNumber)),
+    reader
+      .select({ recipientEmail: quoteEmailSends.recipientEmail, kind: quoteEmailSends.kind, sentByEmail: quoteEmailSends.sentByEmail, sentAt: quoteEmailSends.sentAt })
+      .from(quoteEmailSends)
+      .where(eq(quoteEmailSends.quoteId, id))
+      .orderBy(desc(quoteEmailSends.sentAt), desc(quoteEmailSends.id)),
   ]);
   const event = booking[0] ? { id: booking[0].id, title: booking[0].title || 'Untitled event', eventDate: booking[0].eventDate } : null;
   return {
@@ -278,6 +292,7 @@ export async function getQuote(id: string, reader: Tx | typeof db = db): Promise
     updatedByEmail: row.updatedByEmail,
     items: items.map(toItemDto),
     invoices: linkedInvoices,
+    emailSends: sends,
   };
 }
 
@@ -346,6 +361,104 @@ export async function updateQuote(id: string, input: QuoteUpdateInput, actor: Ac
     await audit(tx, { entityId: id, action: 'update', actor, before, after: await snapshot(tx, id), at });
     return (await getQuote(id, tx))!;
   });
+}
+
+// Soft delete: the quote disappears from the app and its client link stops
+// working (links only resolve to quotes that aren't deleted, and live ones
+// are revoked here too). The row and its history stay in the database.
+export async function deleteQuote(id: string, expectedUpdatedAt: string, actor: Actor): Promise<void> {
+  await db.transaction(async (tx) => {
+    const before = await snapshot(tx, id);
+    if (!before || before.deletedAt) throw new FinanceError(404, 'Quote not found');
+    if (before.updatedAt !== expectedUpdatedAt) throw new FinanceError(409, staleMessage, undefined, await getQuote(id, tx));
+    const invoiceRows = await tx.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.quoteId, id), isNull(invoices.deletedAt)));
+    const blocker = quoteDeleteBlocker(before.status, invoiceRows.length);
+    if (blocker) throw new FinanceError(409, blocker);
+
+    const at = nextTimestamp(before.updatedAt);
+    const [deleted] = await tx
+      .update(quotes)
+      .set({ deletedAt: at, updatedByEmail: actor.email, updatedAt: at })
+      .where(and(eq(quotes.id, id), eq(quotes.updatedAt, before.updatedAt)))
+      .returning({ id: quotes.id });
+    if (!deleted) throw new FinanceError(409, staleMessage);
+    await tx
+      .update(quoteAccessLinks)
+      .set({ revokedAt: at, revokedByEmail: actor.email })
+      .where(and(eq(quoteAccessLinks.quoteId, id), isNull(quoteAccessLinks.revokedAt)));
+    await audit(tx, { entityId: id, action: 'delete', actor, before, after: { ...before, deletedAt: at }, at });
+  });
+}
+
+// Records an email the provider has accepted. Called only after a
+// successful send; the first one for the quote is 'first', later ones
+// 'resend'. Stores the recipient and who sent it — never the link or PDF.
+export async function recordQuoteEmailSend(quoteId: string, send: { recipientEmail: string; providerMessageId: string | null }, actor: Actor): Promise<QuoteEmailSendKind> {
+  return db.transaction(async (tx) => {
+    const [earlier] = await tx.select({ id: quoteEmailSends.id }).from(quoteEmailSends).where(eq(quoteEmailSends.quoteId, quoteId)).limit(1);
+    const kind: QuoteEmailSendKind = earlier ? 'resend' : 'first';
+    await tx.insert(quoteEmailSends).values({
+      quoteId,
+      recipientEmail: send.recipientEmail,
+      kind,
+      sentByEmail: actor.email,
+      providerMessageId: send.providerMessageId,
+      sentAt: nowIso(),
+    });
+    return kind;
+  });
+}
+
+// "YYYY-MM-DD" plus whole days, as a calendar date.
+function addDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// A new draft copied from a quote: same customer, event, items, pricing,
+// notes and terms; dated `today` and valid for as many days as the original;
+// a new number. `newId` comes from the browser so a retried request returns
+// the same copy instead of making a second one.
+export async function cloneQuote(id: string, newId: string, today: string, actor: Actor): Promise<QuoteDto> {
+  const source = await getQuote(id);
+  if (!source) throw new FinanceError(404, 'Quote not found');
+  const validityDays = Math.max(0, Math.round((Date.parse(source.validUntil) - Date.parse(source.quoteDate)) / 86_400_000));
+  const input: QuoteCreateInput = {
+    id: newId,
+    customerName: source.customerName,
+    customerCompany: source.customerCompany,
+    customerEmail: source.customerEmail,
+    customerPhone: source.customerPhone,
+    billingAddress: source.billingAddress,
+    // A deleted booking can't be linked again; the event details are kept.
+    eventId: source.eventDeleted ? null : source.eventId,
+    eventName: source.eventName,
+    eventDate: source.eventDate,
+    venueName: source.venueName,
+    venueAddress: source.venueAddress,
+    quoteDate: today,
+    validUntil: addDays(today, validityDays),
+    items: source.items.map((i) => ({
+      section: i.section,
+      itemName: i.itemName,
+      description: i.description,
+      quantity: i.quantity,
+      unitPriceCents: i.unitPriceCents,
+      discountType: i.discountType,
+      discountValue: i.discountValue,
+    })),
+    discountType: source.discountType,
+    discountValue: source.discountValue,
+    taxLabel: source.taxLabel,
+    taxRateBp: source.taxRateBp,
+    depositType: source.depositType,
+    depositValue: source.depositValue,
+    notes: source.notes,
+    terms: source.terms,
+    showPaymentDetails: source.showPaymentDetails,
+  };
+  return (await createQuote(input, actor)).quote;
 }
 
 // Manual status change (Phase 1 has no sending or client acceptance yet).

@@ -199,6 +199,14 @@ p { margin: 0; }
 .sign-line .rule { flex: 1 1 auto; border-bottom: 1px solid var(--ink-2); height: 100%; }
 .sign-pair { display: flex; gap: 18px; }
 .sign-pair .sign-line { flex: 1 1 0; }
+/* Accepted online: the client's details written on the lines. */
+.accept .box.checked { display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; line-height: 1; color: #fff; background: #6b8fd6; }
+.sign-line .rule { display: flex; align-items: flex-end; min-width: 0; padding: 0 2px 2px; }
+.sign-line .filled { font-size: 9.4px; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.sign-line .muted { font-weight: 400; color: var(--ink-3); }
+.accept.signed .sign-line.sig { height: 44px; }
+.sign-line .sig-image { display: block; height: 40px; width: auto; max-width: 100%; object-fit: contain; object-position: left bottom; }
+.sign-line .sig-typed { font-size: 15px; font-style: italic; font-weight: 500; letter-spacing: 0.01em; }
 
 /* ---------- payment status (invoice) ---------- */
 .status { display: flex; break-inside: avoid; }

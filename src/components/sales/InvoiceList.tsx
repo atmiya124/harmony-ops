@@ -4,7 +4,7 @@ import { Receipt } from 'lucide-react';
 import { useCachedData } from '@/hooks/useCachedData';
 import { INVOICES_KEY, listInvoices } from '@/lib/quotesApi';
 import { formatCents } from '@/lib/money';
-import { Card, documentDate, InvoiceStatusBadge, LoadError, PdfActions } from './ui';
+import { Avatar, Card, Chip, documentDate, InvoiceStatusBadge, listCardClass, listCellClass, listHeadClass, listRowClass, LoadError, PdfActions } from './ui';
 
 // Invoices are read-only in Phase 1: they will be created from accepted
 // quotes (copying the items and totals) in a later phase.
@@ -12,7 +12,13 @@ export default function InvoiceList() {
   const { data: invoices, loading, error } = useCachedData(INVOICES_KEY, listInvoices);
 
   if (error && !invoices) return <LoadError message={error} />;
-  if (loading) return <div className="h-16 animate-pulse rounded-xl bg-[var(--paper-sunk)]" aria-busy="true" />;
+  if (loading) {
+    return (
+      <div className={`${listCardClass} p-5`} aria-busy="true">
+        <div className="h-9 animate-pulse rounded-lg bg-[var(--paper-sunk)]" />
+      </div>
+    );
+  }
   if (!invoices || invoices.length === 0) {
     return (
       <Card className="flex flex-col items-center gap-2 py-14 text-center">
@@ -24,41 +30,75 @@ export default function InvoiceList() {
   }
 
   return (
-    <Card padded={false} className="overflow-x-auto">
-      <table className="w-full min-w-[680px] text-left text-[14px]">
-        <thead className="border-b border-[var(--line)] bg-[var(--paper-sunk)] text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-2)]">
-          <tr>
-            <th className="px-4 py-3">Invoice #</th>
-            <th className="px-4 py-3">Customer</th>
-            <th className="px-4 py-3">Due</th>
-            <th className="px-4 py-3 text-right">Total</th>
-            <th className="px-4 py-3 text-right">Balance</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">
-              <span className="sr-only">PDF</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[var(--line)]">
-          {invoices.map((inv) => (
-            <tr key={inv.id}>
-              <td className="px-4 py-3 font-semibold tabular-nums">{inv.invoiceNumber}</td>
-              <td className="px-4 py-3">{inv.customerName}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-[var(--ink-2)]">{documentDate(inv.dueDate)}</td>
-              <td className="px-4 py-3 text-right tabular-nums">{formatCents(inv.totalCents)}</td>
-              <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatCents(inv.balanceDueCents)}</td>
-              <td className="px-4 py-3">
-                <InvoiceStatusBadge status={inv.status} />
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex justify-end gap-1.5">
-                  <PdfActions href={`/api/invoices/${inv.id}/pdf`} compact />
-                </div>
-              </td>
+    <>
+      {/* Desktop: a plain, scannable table. */}
+      <div className={`${listCardClass} hidden md:block`}>
+        <table className="w-full text-left text-[14px]">
+          <thead>
+            <tr className="border-b border-[var(--line)]">
+              <th className={listHeadClass}>Customer</th>
+              <th className={listHeadClass}>Invoice №</th>
+              <th className={listHeadClass}>Due</th>
+              <th className={listHeadClass}>Status</th>
+              <th className={`${listHeadClass} text-right`}>Total</th>
+              <th className={`${listHeadClass} text-right`}>Balance</th>
+              <th className={`${listHeadClass} text-right`}>
+                <span className="sr-only">PDF</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
+          </thead>
+          <tbody>
+            {invoices.map((inv) => (
+              <tr key={inv.id} className={listRowClass}>
+                <td className={listCellClass}>
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <Avatar name={inv.customerName} />
+                    <span className="truncate font-semibold">{inv.customerName}</span>
+                  </span>
+                </td>
+                <td className={listCellClass}>
+                  <Chip>{inv.invoiceNumber}</Chip>
+                </td>
+                <td className={`${listCellClass} whitespace-nowrap text-[var(--ink-2)]`}>{documentDate(inv.dueDate)}</td>
+                <td className={listCellClass}>
+                  <InvoiceStatusBadge status={inv.status} />
+                </td>
+                <td className={`${listCellClass} whitespace-nowrap text-right tabular-nums text-[var(--ink-2)]`}>{formatCents(inv.totalCents)}</td>
+                <td className={`${listCellClass} whitespace-nowrap text-right font-semibold tabular-nums`}>{formatCents(inv.balanceDueCents)}</td>
+                <td className={listCellClass}>
+                  <div className="flex justify-end gap-1.5">
+                    <PdfActions href={`/api/invoices/${inv.id}/pdf`} compact />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Phone: one compact row per invoice. */}
+      <ul className={`${listCardClass} px-4 md:hidden`}>
+        {invoices.map((inv) => (
+          <li key={inv.id} className={`${listRowClass} flex items-center gap-3 py-3`}>
+            <Avatar name={inv.customerName} size={34} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-semibold">{inv.customerName}</span>
+              <span className="block truncate text-[12px] text-[var(--ink-3)]">
+                {inv.invoiceNumber} · Due {documentDate(inv.dueDate)}
+              </span>
+              <span className="mt-1 block">
+                <InvoiceStatusBadge status={inv.status} />
+              </span>
+            </span>
+            <span className="flex shrink-0 flex-col items-end gap-1.5">
+              <span className="text-[15px] font-semibold tabular-nums">{formatCents(inv.balanceDueCents)}</span>
+              <span className="flex gap-1.5">
+                <PdfActions href={`/api/invoices/${inv.id}/pdf`} compact />
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

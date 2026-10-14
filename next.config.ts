@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/quotes/**/pdf': ['./node_modules/@sparticuz/chromium/bin/**'],
     '/api/invoices/**/pdf': ['./node_modules/@sparticuz/chromium/bin/**'],
+    '/api/public/quotes/**/pdf': ['./node_modules/@sparticuz/chromium/bin/**'],
+    // Emailing a quote renders its PDF attachment too.
+    '/api/quotes/**/send': ['./node_modules/@sparticuz/chromium/bin/**'],
   },
   experimental: {
     // Keep pages already visited for 5 minutes, so switching back to a tab

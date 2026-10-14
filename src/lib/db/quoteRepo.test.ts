@@ -255,6 +255,48 @@ test('defaults fall back to 13% HST when finance settings are empty', async () =
 // the local driver can leave the file locked afterwards. Turso queues write
 // transactions instead. Either way a save gets a unique number or fails
 // cleanly — two saves never share one.
+test('delete: soft, hidden from reads, stale versions and accepted quotes refused', async () => {
+  const { quote } = await repo.createQuote(input(), actor);
+  await assert.rejects(repo.deleteQuote(quote.id, 'old-version', actor), (e: { status?: number }) => e.status === 409);
+  await repo.deleteQuote(quote.id, quote.updatedAt, actor);
+  assert.equal(await repo.getQuote(quote.id), null);
+  assert.ok(!(await repo.listQuotes()).some((q) => q.id === quote.id));
+  const row = await client.execute({ sql: 'SELECT deleted_at FROM quotes WHERE id = ?', args: [quote.id] });
+  assert.ok(row.rows[0].deleted_at, 'the row is kept, marked deleted');
+  const history = await client.execute({ sql: 'SELECT action FROM sales_audit_log WHERE entity_id = ? ORDER BY id', args: [quote.id] });
+  assert.deepEqual(history.rows.map((r) => r.action), ['create', 'delete']);
+  await assert.rejects(repo.deleteQuote(quote.id, quote.updatedAt, actor), (e: { status?: number }) => e.status === 404);
+
+  const { quote: other } = await repo.createQuote(input(), actor);
+  const accepted = await repo.setQuoteStatus(other.id, { status: 'accepted', expectedUpdatedAt: other.updatedAt }, actor);
+  await assert.rejects(repo.deleteQuote(other.id, accepted.updatedAt, actor), /Accepted quotes can't be deleted/);
+});
+
+test('clone: a new draft with a new number, today’s date, the same validity, items and pricing', async () => {
+  const { quote } = await repo.createQuote(input({ notes: 'Load-in at 2', eventDate: '2026-12-01' }), actor);
+  const sent = await repo.setQuoteStatus(quote.id, { status: 'sent', expectedUpdatedAt: quote.updatedAt }, actor);
+  const newId = randomUUID();
+  const copy = await repo.cloneQuote(sent.id, newId, '2026-10-20', actor);
+  assert.equal(copy.id, newId);
+  assert.notEqual(copy.quoteNumber, quote.quoteNumber);
+  assert.equal(copy.status, 'draft');
+  assert.equal(copy.quoteDate, '2026-10-20');
+  assert.equal(copy.validUntil, '2026-11-19'); // 30 days, as on the original
+  assert.equal(copy.totalCents, quote.totalCents);
+  assert.equal(copy.notes, 'Load-in at 2');
+  assert.equal(copy.eventDate, '2026-12-01');
+  assert.deepEqual(
+    copy.items.map((i) => [i.section, i.itemName, i.quantity, i.unitPriceCents]),
+    quote.items.map((i) => [i.section, i.itemName, i.quantity, i.unitPriceCents]),
+  );
+  assert.ok(copy.items.every((i) => !quote.items.some((o) => o.id === i.id)), 'items are new rows');
+  // A retried clone returns the same copy.
+  assert.equal((await repo.cloneQuote(sent.id, newId, '2026-10-20', actor)).quoteNumber, copy.quoteNumber);
+  // The original is untouched.
+  assert.equal((await repo.getQuote(quote.id))!.status, 'sent');
+});
+
+// Last: the deliberate lock contention leaves the local SQLite file busy for a moment.
 test('concurrent saves never share a quote number', async () => {
   const results = await Promise.allSettled(Array.from({ length: 12 }, () => repo.createQuote(input(), actor)));
   const numbers = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value.quote.quoteNumber] : []));

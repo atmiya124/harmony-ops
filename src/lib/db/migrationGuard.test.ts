@@ -92,3 +92,12 @@ test('planMigration: new columns only on existing tables Harmony Ops created', (
   assert.equal(plan('CREATE INDEX `i` ON `quotes` (`id`)').ok, false);
   assert.equal(plan('CREATE TABLE `fresh` (`id` text)', 'CREATE INDEX `i` ON `fresh` (`id`)').ok, true);
 });
+
+test('the quote email history migration only creates its own table and index', () => {
+  const checks = splitMigration(readFileSync(join(process.cwd(), 'drizzle/0009_quote_email_sends.sql'), 'utf8')).map(checkStatement);
+  for (const c of checks) assert.equal(c.ok, true, `${c.reason}: ${c.statement}`);
+  assert.deepEqual(checks.map((c) => [c.kind, c.table]), [
+    ['create_table', 'quote_email_sends'],
+    ['create_index', 'quote_email_sends'],
+  ]);
+});

@@ -23,6 +23,12 @@ import {
   QUOTE_STATUSES,
   SALES_AUDIT_ACTIONS,
   SALES_AUDIT_ENTITY_TYPES,
+  ACTIVITY_ACTORS,
+  MAX_SIGNATURE_DATA_LENGTH,
+  QUOTE_ACTIVITY_EVENTS,
+  QUOTE_EMAIL_SEND_KINDS,
+  QUOTE_RESPONSE_ACTIONS,
+  SIGNATURE_TYPES,
 } from '../sales/types';
 
 // These three tables and `users` already exist in this Turso database,
@@ -693,6 +699,126 @@ export const salesAuditLog = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Client quote links and responses (Phase 3). New tables.
+// ---------------------------------------------------------------------------
+
+// A secret link that lets a client open one quote (/q/<token>). Only a hash
+// of the token is used to find it; the token itself is kept encrypted so
+// staff can copy the link again (src/lib/sales/clientLinkToken.ts). At most
+// one link per quote is live at a time — creating a new one revokes the old.
+export const quoteAccessLinks = sqliteTable(
+  'quote_access_links',
+  {
+    id: text('id').primaryKey(),
+    quoteId: text('quote_id')
+      .notNull()
+      .references(() => quotes.id),
+    tokenHash: text('token_hash').notNull(),
+    tokenEncrypted: text('token_encrypted'),
+    // Optional hard cut-off for the link itself (null = until revoked).
+    // Whether the quote can still be accepted always follows the quote's
+    // current valid-until date, not this.
+    expiresAt: text('expires_at'),
+    revokedAt: text('revoked_at'),
+    revokedByEmail: text('revoked_by_email'),
+    lastViewedAt: text('last_viewed_at'),
+    viewCount: integer('view_count').notNull().default(0),
+    createdByUserId: text('created_by_user_id').notNull(),
+    createdByEmail: text('created_by_email').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('quote_access_links_token_hash_unique').on(t.tokenHash),
+    index('quote_access_links_quote_id_idx').on(t.quoteId),
+    check('quote_access_links_hash_format', sql`length(${t.tokenHash}) = 64`),
+    check('quote_access_links_view_count', sql`${t.viewCount} >= 0`),
+  ],
+);
+
+// The client's answer through a link: an acceptance (name, terms, signature)
+// or a decline (optional reason). Kept forever, with what was accepted
+// (the quote's total and version at that moment) and the request's IP and
+// browser for the record. The database insists an acceptance is complete.
+export const quoteAcceptances = sqliteTable(
+  'quote_acceptances',
+  {
+    id: text('id').primaryKey(),
+    quoteId: text('quote_id')
+      .notNull()
+      .references(() => quotes.id),
+    accessLinkId: text('access_link_id').references(() => quoteAccessLinks.id),
+    action: text('action', { enum: QUOTE_RESPONSE_ACTIONS }).notNull(),
+    customerName: text('customer_name'),
+    customerTitle: text('customer_title'),
+    signatureType: text('signature_type', { enum: SIGNATURE_TYPES }),
+    signatureData: text('signature_data'), // typed: the name; drawn: a PNG data URL
+    acceptedTerms: integer('accepted_terms', { mode: 'boolean' }).notNull().default(false),
+    declineReason: text('decline_reason'),
+    quoteTotalCents: integer('quote_total_cents').notNull(),
+    quoteVersion: text('quote_version').notNull(), // the quote's updatedAt the client saw
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    index('quote_acceptances_quote_id_idx').on(t.quoteId),
+    check('quote_acceptances_action_valid', sql`${t.action} IN (${inList(QUOTE_RESPONSE_ACTIONS)})`),
+    check('quote_acceptances_signature_type_valid', sql`${t.signatureType} IS NULL OR ${t.signatureType} IN (${inList(SIGNATURE_TYPES)})`),
+    check(
+      'quote_acceptances_acceptance_complete',
+      sql`${t.action} <> 'accepted' OR (${t.customerName} IS NOT NULL AND ${t.signatureType} IS NOT NULL AND ${t.signatureData} IS NOT NULL AND ${t.acceptedTerms} = 1)`,
+    ),
+    check('quote_acceptances_signature_size', sql`${t.signatureData} IS NULL OR length(${t.signatureData}) <= ${sql.raw(String(MAX_SIGNATURE_DATA_LENGTH))}`),
+  ],
+);
+
+// What happened around client links: created, revoked, viewed, accepted,
+// declined — by staff or the client. Never holds a token.
+export const quoteActivity = sqliteTable(
+  'quote_activity',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    quoteId: text('quote_id')
+      .notNull()
+      .references(() => quotes.id),
+    event: text('event', { enum: QUOTE_ACTIVITY_EVENTS }).notNull(),
+    actorType: text('actor_type', { enum: ACTIVITY_ACTORS }).notNull(),
+    actorEmail: text('actor_email'), // staff only
+    accessLinkId: text('access_link_id'),
+    metadata: text('metadata'), // JSON
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    index('quote_activity_quote_id_idx').on(t.quoteId),
+    check('quote_activity_event_valid', sql`${t.event} IN (${inList(QUOTE_ACTIVITY_EVENTS)})`),
+    check('quote_activity_actor_valid', sql`${t.actorType} IN (${inList(ACTIVITY_ACTORS)})`),
+  ],
+);
+
+// Every quote email the provider accepted: who it went to, when, who sent
+// it, and whether it was the quote's first email or a resend. Failed sends
+// are never recorded. Holds no link token and no PDF (its own table because
+// quote_activity's event CHECK can't be widened on the shared database).
+export const quoteEmailSends = sqliteTable(
+  'quote_email_sends',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    quoteId: text('quote_id')
+      .notNull()
+      .references(() => quotes.id),
+    recipientEmail: text('recipient_email').notNull(),
+    kind: text('kind', { enum: QUOTE_EMAIL_SEND_KINDS }).notNull(),
+    sentByEmail: text('sent_by_email').notNull(), // staff
+    providerMessageId: text('provider_message_id'), // Resend's id, for tracing a delivery
+    sentAt: text('sent_at').notNull(),
+  },
+  (t) => [
+    index('quote_email_sends_quote_id_idx').on(t.quoteId),
+    check('quote_email_sends_kind_valid', sql`${t.kind} IN (${inList(QUOTE_EMAIL_SEND_KINDS)})`),
+  ],
+);
+
 export type BookingRow = typeof bookings.$inferSelect;
 export type NewBookingRow = typeof bookings.$inferInsert;
 export type BookingEquipmentRow = typeof bookingEquipment.$inferSelect;
@@ -716,3 +842,6 @@ export type QuoteRow = typeof quotes.$inferSelect;
 export type QuoteItemRow = typeof quoteItems.$inferSelect;
 export type InvoiceRow = typeof invoices.$inferSelect;
 export type InvoiceItemRow = typeof invoiceItems.$inferSelect;
+export type QuoteAccessLinkRow = typeof quoteAccessLinks.$inferSelect;
+export type QuoteAcceptanceRow = typeof quoteAcceptances.$inferSelect;
+export type QuoteEmailSendRow = typeof quoteEmailSends.$inferSelect;

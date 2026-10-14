@@ -57,6 +57,20 @@
       "when": 1791922888221,
       "tag": "0007_payment_details_option",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791925621060,
+      "tag": "0008_client_quote_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791993104985,
+      "tag": "0009_quote_email_sends",
+      "breakpoints": true
     }
   ]
 }

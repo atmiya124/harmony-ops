@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 // Screens that use the light Quotes & Invoices theme and room for a table on
 // desktop. Everything else keeps the phone-width dark frame.
 export function isLightWideScreen(pathname: string): boolean {
-  return /^\/(quotes|invoices)(\/|$)/.test(pathname);
+  return /^\/(quotes|invoices|q)(\/|$)/.test(pathname);
 }
 
 // The app's outer frame. Client-side so it follows in-app navigation (the

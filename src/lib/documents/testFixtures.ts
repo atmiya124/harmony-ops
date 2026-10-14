@@ -150,6 +150,7 @@ export function quoteFixture(o: QuoteFixtureOptions = {}): QuoteDto {
     updatedAt: '2026-10-13T14:00:00.000Z',
     items: dtoItems,
     invoices: [],
+    emailSends: [],
     ...o.overrides,
   };
 }

@@ -37,7 +37,19 @@ body {
   box-sizing: border-box;
 }
 
-button,
+/* Buttons take the page's font, in the base layer (like Tailwind's own
+   preflight) so utilities on a button — font-semibold, text-[14px] — win.
+   Unlayered, this rule outranked every utility and every button rendered
+   at the page's 16px regular whatever its classes said. */
+@layer base {
+  button {
+    font: inherit;
+  }
+}
+
+/* Form fields deliberately stay unlayered: they always use the page's font
+   at 16px, because iPhone Safari zooms the page into any field smaller
+   than 16px when it's focused. */
 input,
 select,
 textarea {
@@ -356,6 +368,7 @@ html[data-nav='none']::view-transition-new(.screen-in) {
   --bg: #f7f7f5;
   --paper: #ffffff;
   --paper-sunk: #f3f2ef;
+  --tray: #ebeae6; /* the grey panel that side cards sit in */
   --line: #e6e4df;
   --line-strong: #d5d2cb;
   --ink: #1f1f22;

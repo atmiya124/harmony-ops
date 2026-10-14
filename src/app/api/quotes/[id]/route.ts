@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withPartner } from '@/lib/auth/session';
-import { getQuote, updateQuote } from '@/lib/db/quoteRepo';
+import { deleteQuote, getQuote, updateQuote } from '@/lib/db/quoteRepo';
 import { quoteUpdateSchema } from '@/lib/schemas/quote';
 import { financeErrorResponse, parseBody, readJson } from '@/lib/api/financeHttp';
 
@@ -26,6 +26,22 @@ export const GET = withPartner<Request, Params>(async (_req, { params }) => {
     return quote ? NextResponse.json(quote) : notFound();
   } catch (err) {
     return financeErrorResponse(err, 'load quote');
+  }
+});
+
+const deleteSchema = z.object({ expectedUpdatedAt: z.string().min(1, 'Missing version') });
+
+// Deletes the quote (soft delete; its client link stops working).
+export const DELETE = withPartner<Request, Params>(async (req, { params, partner }) => {
+  const id = await quoteId(params);
+  if (!id) return notFound();
+  const body = parseBody(deleteSchema, await readJson(req));
+  if (!body.ok) return body.response;
+  try {
+    await deleteQuote(id, body.data.expectedUpdatedAt, partner);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return financeErrorResponse(err, 'delete quote');
   }
 });
 

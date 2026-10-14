@@ -9,8 +9,16 @@ import { INVOICE_STATUS_LABELS, QUOTE_STATUS_LABELS, type InvoiceStatus, type Qu
 // Production quote: white panels, hairline borders, small uppercase labels
 // with a short orange tick above them.
 
-export function Card({ children, className = '', padded = true }: { children: React.ReactNode; className?: string; padded?: boolean }) {
-  return <section className={`rounded-xl border border-[var(--line)] bg-[var(--paper)] ${padded ? 'p-4 md:p-5' : ''} ${className}`}>{children}</section>;
+// A white card; `tray` is the soft grey panel for secondary blocks (the
+// client link) and the side panel that white cards sit in.
+export function Card({ children, className = '', padded = true, tone = 'paper' }: { children: React.ReactNode; className?: string; padded?: boolean; tone?: 'paper' | 'tray' }) {
+  const look = tone === 'tray' ? 'bg-[var(--tray)]' : 'border border-[var(--line)] bg-[var(--paper)] shadow-[0_1px_2px_rgba(0,0,0,0.03)]';
+  return <section className={`rounded-2xl ${look} ${padded ? 'p-4 md:p-5' : ''} ${className}`}>{children}</section>;
+}
+
+// The colour a quote status reads in (as in its badge), for status text.
+export function quoteStatusColor(status: QuoteStatus): string {
+  return QUOTE_TONES[status].text;
 }
 
 // "BILL TO:"-style heading: a short orange bar over a small uppercase label.
@@ -62,16 +70,29 @@ export function DateInput({ value, onChange, invalid, ...rest }: { value: string
   );
 }
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
+// Harmony Ops buttons, in the light Sales colours: bold pills that press in
+// slightly; the primary is the solid high-contrast fill (white on the dark
+// app, ink here), the secondary an outline.
 const buttonClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-[var(--ink)] text-white hover:bg-black disabled:bg-[var(--ink-3)]',
-  secondary: 'border border-[var(--line-strong)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--paper-sunk)]',
+  primary: 'bg-[var(--ink)] text-white hover:bg-black',
+  secondary: 'border border-[var(--line-strong)] bg-[var(--paper)] text-[var(--ink)] hover:border-[var(--ink-3)] hover:bg-[var(--paper-sunk)]',
   ghost: 'text-[var(--ink-2)] hover:bg-[var(--paper-sunk)] hover:text-[var(--ink)]',
+  danger: 'bg-[var(--bad)] text-white hover:brightness-95',
 };
 
+// Default sizes, each dropped when `extra` brings its own (Tailwind decides
+// between two padding classes by stylesheet order, not by which comes last).
+const BUTTON_SIZE: [RegExp, string][] = [
+  [/(^|\s)px-/, 'px-5'],
+  [/(^|\s)py-/, 'py-2.5'],
+  [/(^|\s)text-\[\d/, 'text-[14px]'],
+];
+
 export function buttonClass(variant: ButtonVariant = 'primary', extra = '') {
-  return `inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-[14px] font-semibold transition disabled:cursor-not-allowed ${buttonClasses[variant]} ${extra}`;
+  const size = BUTTON_SIZE.filter(([own]) => !own.test(extra)).map(([, cls]) => cls).join(' ');
+  return `inline-flex touch-manipulation select-none items-center justify-center gap-1.5 rounded-full ${size} font-bold transition-[transform,background-color,border-color,color] duration-75 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)] ${buttonClasses[variant]} ${extra}`;
 }
 
 export function ButtonLink({ href, variant = 'primary', className = '', children, ...rest }: { href: string; variant?: ButtonVariant; className?: string; children: React.ReactNode } & Omit<React.ComponentProps<typeof Link>, 'href' | 'className'>) {
@@ -147,16 +168,79 @@ export { documentDate } from '@/lib/sales/format';
 
 // Preview opens the PDF in a new tab (the browser's own viewer); Download
 // saves it. `href` is the document's PDF route, e.g. /api/quotes/<id>/pdf.
+// `compact` (list rows): two small round icon buttons.
 export function PdfActions({ href, compact = false }: { href: string; compact?: boolean }) {
-  const size = compact ? 'px-2.5 py-1.5 text-[13px]' : '';
+  if (compact) {
+    return (
+      <>
+        <a href={href} target="_blank" rel="noopener" className={iconButtonClass('size-8')} aria-label="Preview PDF" title="Preview PDF">
+          <FileText size={15} />
+        </a>
+        <a href={`${href}?download=1`} download className={iconButtonClass('size-8')} aria-label="Download PDF" title="Download PDF">
+          <Download size={15} />
+        </a>
+      </>
+    );
+  }
   return (
     <>
-      <a href={href} target="_blank" rel="noopener" className={buttonClass('secondary', size)}>
-        <FileText size={15} /> {compact ? 'PDF' : 'Preview PDF'}
+      <a href={href} target="_blank" rel="noopener" className={buttonClass('secondary')}>
+        <FileText size={15} /> Preview PDF
       </a>
-      <a href={`${href}?download=1`} download className={buttonClass('secondary', size)} aria-label="Download PDF" title="Download PDF">
-        <Download size={15} /> {compact ? null : 'Download PDF'}
+      <a href={`${href}?download=1`} download className={buttonClass('secondary')} aria-label="Download PDF" title="Download PDF">
+        <Download size={15} /> Download PDF
       </a>
     </>
   );
+}
+
+// ---------------------------------------------------------------- lists
+
+// A round white icon button with a soft shadow, as in the list headers.
+// `size` replaces the default 40px.
+export function iconButtonClass(size = 'size-10') {
+  return `inline-flex ${size} shrink-0 touch-manipulation items-center justify-center rounded-full bg-[var(--paper)] text-[var(--ink)] shadow-[0_1px_3px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.05] transition-[transform,background-color] duration-75 hover:bg-[var(--paper-sunk)] active:scale-[0.94] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)]`;
+}
+
+export function IconLink({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} aria-label={label} title={label} className={iconButtonClass()}>
+      {children}
+    </Link>
+  );
+}
+
+// The white card a list sits in, its column headings and row dividers. Rows
+// run edge to edge (the outer cells carry the card's side padding), so a
+// clickable row's hover highlight fills the full width and is clipped
+// cleanly by the card's rounded corners.
+export const listCardClass = 'overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--paper)] shadow-[0_1px_2px_rgba(0,0,0,0.03)]';
+export const listHeadClass = 'px-3 py-3 text-[13px] font-medium text-[var(--ink-3)] first:pl-5 last:pr-5';
+export const listCellClass = 'px-3 py-3.5 first:pl-5 last:pr-5';
+export const listRowClass = 'border-b border-[var(--line)] last:border-0';
+export const listRowHoverClass = 'cursor-pointer transition-colors hover:bg-[#f0f0f2]';
+
+const AVATAR_COLOURS = ['#1f1f22', '#c2410c', '#2563eb', '#7c3aed', '#0f766e', '#be123c', '#b45309', '#475569'];
+
+// A coloured circle with the customer's initials; the same name always gets
+// the same colour.
+export function Avatar({ name, size = 24 }: { name: string; size?: number }) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const initials = (words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase();
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return (
+    <span
+      aria-hidden
+      className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.4), backgroundColor: AVATAR_COLOURS[hash % AVATAR_COLOURS.length] }}
+    >
+      {initials}
+    </span>
+  );
+}
+
+// A quiet grey tag, e.g. a quote number.
+export function Chip({ children }: { children: React.ReactNode }) {
+  return <span className="inline-flex items-center whitespace-nowrap rounded-md bg-[var(--paper-sunk)] px-2 py-1 text-[12px] font-medium tabular-nums text-[var(--ink-2)]">{children}</span>;
 }

@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server';
 import { getQuote } from '../db/quoteRepo';
 import { getInvoice } from '../db/invoiceRepo';
+import { getAcceptanceForDocument } from '../db/clientLinkRepo';
 import { DOCUMENT_CONFIG, type DocumentConfig } from '../sales/documentConfig';
 import { invoiceDocument, quoteDocument, type DocumentModel } from './documentModel';
 import { renderDocumentHtml } from '@/components/documents/renderDocument';
@@ -26,9 +27,9 @@ async function pdfResponse(doc: DocumentModel, download: boolean): Promise<Respo
 }
 
 export async function quotePdfResponse(id: string, download: boolean, config: DocumentConfig = DOCUMENT_CONFIG): Promise<Response> {
-  const quote = await getQuote(id);
+  const [quote, accepted] = await Promise.all([getQuote(id), getAcceptanceForDocument(id)]);
   if (!quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
-  return pdfResponse(quoteDocument(quote, config), download);
+  return pdfResponse(quoteDocument(quote, config, accepted), download);
 }
 
 export async function invoicePdfResponse(id: string, download: boolean, config: DocumentConfig = DOCUMENT_CONFIG): Promise<Response> {

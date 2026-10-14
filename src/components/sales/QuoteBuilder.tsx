@@ -317,8 +317,9 @@ export default function QuoteBuilder(props: Props) {
 
       {/* On phones the panel itself disappears (contents) so Totals and the
           buttons can take their own places in the order above. */}
-      <aside className="contents lg:sticky lg:top-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block lg:space-y-3 lg:self-start">
-        <Card className="order-2 lg:order-none">
+      {/* Desktop: a grey tray holding the white Totals card, with Save under it. */}
+      <aside className="contents lg:sticky lg:top-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block lg:self-start lg:rounded-[28px] lg:bg-[var(--tray)] lg:p-2">
+        <Card className="order-2 lg:order-none lg:rounded-[22px] lg:border-0 lg:shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
           <Eyebrow>Totals</Eyebrow>
           <dl className="space-y-3 text-[14px]">
             {totals.itemDiscountsCents > 0 ? (
@@ -391,12 +392,12 @@ export default function QuoteBuilder(props: Props) {
           </p>
         </Card>
 
-        <div className="order-4 flex gap-2 lg:order-none">
-          <button type="button" onClick={() => router.push(cancelHref)} className={buttonClass('secondary', 'flex-1')} disabled={saving}>
-            Cancel
-          </button>
-          <button type="button" onClick={save} className={buttonClass('primary', 'flex-[2]')} disabled={saving}>
+        <div className="order-4 space-y-1 lg:order-none lg:px-1 lg:pt-3">
+          <button type="button" onClick={save} className={buttonClass('primary', 'w-full py-3.5 text-[16px]')} disabled={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Save draft'}
+          </button>
+          <button type="button" onClick={() => router.push(cancelHref)} className={buttonClass('ghost', 'w-full py-3 text-[15px]')} disabled={saving}>
+            Cancel
           </button>
         </div>
       </aside>

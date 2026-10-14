@@ -16,7 +16,7 @@
 //   band-head              a heading kept with the block that follows it
 //   term                   one term (terms may run onto a new page)
 
-import type { DocumentModel, DocumentItem, DocumentTotalRow, StatusStep } from '@/lib/documents/documentModel';
+import type { DocumentModel, DocumentItem, DocumentTotalRow, SignedAcceptance, StatusStep } from '@/lib/documents/documentModel';
 import { HARMONY_LOGO_PNG, HARMONY_LOGO_RATIO, HARMONY_MARK_PNG, HARMONY_MARK_RATIO } from '@/lib/documents/logos.generated';
 
 const ACCENT = '#f08a1d';
@@ -355,19 +355,34 @@ export function TermsBlock({ doc }: { doc: DocumentModel }) {
 
 // ---------------------------------------------------------------- acceptance (quote)
 
-function SignLine({ label }: { label: string }) {
+function SignLine({ label, value, className = '' }: { label: string; value?: unknown; className?: string }) {
   return (
-    <div className="sign-line">
+    <div className={`sign-line ${className}`.trim()}>
       <span>{label}</span>
-      <span className="rule" />
+      <span className="rule">{value ?? null}</span>
     </div>
   );
 }
 
-// Visual only: printed for a wet or scanned signature. Electronic acceptance
-// arrives in Phase 3.
+// The client's signature on its line: a drawn one as its image (proportions
+// kept), a typed one as their name, marked as typed.
+function SignedSignature({ signature }: { signature: SignedAcceptance['signature'] }) {
+  if (!signature) return <span className="filled muted">Signature on file unavailable</span>;
+  if (signature.kind === 'drawn') return <img className="sig-image" src={signature.image} width={600} height={200} alt="Client signature" />;
+  return (
+    <span className="filled">
+      <span className="sig-typed">{signature.text}</span>
+      <span className="muted"> (typed)</span>
+    </span>
+  );
+}
+
+// Blank lines for a wet or scanned signature — or, once the client has
+// accepted online, their name, signature, title and the time they accepted.
 export function QuoteAcceptance({ doc }: { doc: DocumentModel }) {
   if (!doc.acceptance) return null;
+  const signed = doc.acceptance.signed;
+  if (signed) return <SignedQuoteAcceptance doc={doc} signed={signed} />;
   return (
     <>
       <BandHead title="Quote acceptance" aside="Sign and return a copy of this quote to confirm your booking" />
@@ -392,6 +407,39 @@ export function QuoteAcceptance({ doc }: { doc: DocumentModel }) {
             <div className="sign-pair">
               <SignLine label="Date" />
               <SignLine label="Title" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function SignedQuoteAcceptance({ doc, signed }: { doc: DocumentModel; signed: SignedAcceptance }) {
+  return (
+    <>
+      <BandHead title="Quote acceptance" aside={`Accepted online · ${signed.acceptedAt}`} />
+      <div className="accept signed" data-flow="block">
+        <div>
+          <div className="who">{doc.acceptance!.authorizedBy}</div>
+          <div className="sign-lines">
+            <SignLine label="Signature" />
+            <SignLine label="Name" />
+            <SignLine label="Date" />
+          </div>
+        </div>
+        <div>
+          <div className="who accent">Customer approval:</div>
+          <div className="statement">
+            <span className="box checked">✓</span>
+            <span>{doc.acceptance!.customerStatement}</span>
+          </div>
+          <div className="sign-lines" style={{ marginTop: 10 }}>
+            <SignLine label="Signature" className="sig" value={<SignedSignature signature={signed.signature} />} />
+            <SignLine label="Name" value={<span className="filled">{signed.name}</span>} />
+            <div className="sign-pair">
+              <SignLine label="Date" value={<span className="filled">{signed.date}</span>} />
+              <SignLine label="Title" value={signed.title ? <span className="filled">{signed.title}</span> : null} />
             </div>
           </div>
         </div>

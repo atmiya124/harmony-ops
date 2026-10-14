@@ -31,6 +31,18 @@ export function isQuoteEditable(status: QuoteStatus): boolean {
   return status === 'draft' || status === 'sent' || status === 'viewed' || status === 'declined' || status === 'expired';
 }
 
+// Why a quote can't be deleted, or null if it can. An accepted or converted
+// quote (or one with invoices) is the record of an agreement, so it stays.
+export function quoteDeleteBlocker(status: QuoteStatus, invoiceCount: number): string | null {
+  if (status === 'accepted' || status === 'converted') return `${QUOTE_STATUS_LABELS[status]} quotes can't be deleted.`;
+  if (invoiceCount > 0) return "Quotes with invoices can't be deleted.";
+  return null;
+}
+
+// Statuses a quote can be emailed to the client from (a draft is sent by
+// it; a sent or viewed one can be sent again).
+export const EMAILABLE_QUOTE_STATUSES: readonly QuoteStatus[] = ['draft', 'sent', 'viewed'];
+
 export function canSetQuoteStatus(from: QuoteStatus, to: QuoteStatus): boolean {
   if (from === to) return false;
   if (from === 'converted' || from === 'cancelled') return false;
@@ -72,6 +84,29 @@ export type SalesAuditEntityType = (typeof SALES_AUDIT_ENTITY_TYPES)[number];
 
 export const SALES_AUDIT_ACTIONS = ['create', 'update', 'status', 'convert', 'payment', 'void', 'delete', 'restore'] as const;
 export type SalesAuditAction = (typeof SALES_AUDIT_ACTIONS)[number];
+
+// Client quote links (Phase 3). The client's answer to a quote:
+export const QUOTE_RESPONSE_ACTIONS = ['accepted', 'declined'] as const;
+export type QuoteResponseAction = (typeof QUOTE_RESPONSE_ACTIONS)[number];
+
+export const SIGNATURE_TYPES = ['typed', 'drawn'] as const;
+export type SignatureType = (typeof SIGNATURE_TYPES)[number];
+
+// What happened around a client link, for quote_activity. (sales_audit_log's
+// action CHECK can't be widened on the shared database, so these live in
+// their own table; status changes still go to sales_audit_log too.)
+export const QUOTE_ACTIVITY_EVENTS = ['client_link_created', 'client_link_revoked', 'quote_viewed', 'quote_accepted', 'quote_declined'] as const;
+export type QuoteActivityEvent = (typeof QUOTE_ACTIVITY_EVENTS)[number];
+
+// A quote email is the quote's first one, or a resend.
+export const QUOTE_EMAIL_SEND_KINDS = ['first', 'resend'] as const;
+export type QuoteEmailSendKind = (typeof QUOTE_EMAIL_SEND_KINDS)[number];
+
+export const ACTIVITY_ACTORS = ['staff', 'client'] as const;
+export type ActivityActor = (typeof ACTIVITY_ACTORS)[number];
+
+// A drawn signature is stored as a small PNG data URL; this caps it.
+export const MAX_SIGNATURE_DATA_LENGTH = 200_000;
 
 // Counters in document_sequences.
 export const DOCUMENT_SEQUENCES = ['quote', 'invoice'] as const;

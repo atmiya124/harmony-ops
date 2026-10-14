@@ -6,7 +6,7 @@ import { ChevronRight, FileText, Plus } from 'lucide-react';
 import { useCachedData } from '@/hooks/useCachedData';
 import { listQuotes, QUOTES_KEY, type QuoteSummaryDto } from '@/lib/quotesApi';
 import { formatCents } from '@/lib/money';
-import { ButtonLink, Card, documentDate, LoadError, QuoteStatusBadge } from './ui';
+import { Avatar, ButtonLink, Card, Chip, documentDate, listCardClass, listCellClass, listHeadClass, listRowClass, listRowHoverClass, LoadError, QuoteStatusBadge } from './ui';
 
 // All quotes, newest first. A row opens the read-only details — editing is
 // always one deliberate step further.
@@ -17,9 +17,9 @@ export default function QuoteList() {
   if (error && !quotes) return <LoadError message={error} />;
   if (loading) {
     return (
-      <div className="space-y-2" aria-busy="true">
+      <div className={`${listCardClass} space-y-3 p-5`} aria-busy="true">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-16 animate-pulse rounded-xl bg-[var(--paper-sunk)]" />
+          <div key={i} className="h-9 animate-pulse rounded-lg bg-[var(--paper-sunk)]" />
         ))}
       </div>
     );
@@ -40,76 +40,71 @@ export default function QuoteList() {
   return (
     <>
       {/* Desktop: a plain, scannable table. */}
-      <Card padded={false} className="hidden overflow-hidden md:block">
+      <div className={`${listCardClass} hidden md:block`}>
         <table className="w-full text-left text-[14px]">
-          <thead className="border-b border-[var(--line)] bg-[var(--paper-sunk)] text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-2)]">
-            <tr>
-              <th className="px-4 py-3 font-bold">Quote #</th>
-              <th className="px-4 py-3 font-bold">Customer</th>
-              <th className="px-4 py-3 font-bold">Event</th>
-              <th className="px-4 py-3 font-bold">Date</th>
-              <th className="px-4 py-3 text-right font-bold">Total</th>
-              <th className="px-4 py-3 font-bold">Status</th>
+          <thead>
+            <tr className="border-b border-[var(--line)]">
+              <th className={listHeadClass}>Customer</th>
+              <th className={listHeadClass}>Quote №</th>
+              <th className={listHeadClass}>Event</th>
+              <th className={listHeadClass}>Quote date</th>
+              <th className={listHeadClass}>Status</th>
+              <th className={`${listHeadClass} text-right`}>Total</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--line)]">
+          <tbody>
             {quotes.map((q) => (
-              <tr
-                key={q.id}
-                onClick={() => router.push(`/quotes/${q.id}`)}
-                className="cursor-pointer transition hover:bg-[var(--paper-sunk)]"
-              >
-                <td className="px-4 py-3">
+              <tr key={q.id} onClick={() => router.push(`/quotes/${q.id}`)} className={`${listRowClass} ${listRowHoverClass}`}>
+                <td className={listCellClass}>
                   {/* The real link, for keyboard users and middle-click. */}
-                  <Link href={`/quotes/${q.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold tabular-nums text-[var(--ink)] hover:underline">
-                    {q.quoteNumber}
+                  <Link href={`/quotes/${q.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2.5 hover:underline">
+                    <Avatar name={q.customerName} />
+                    <span className="truncate font-semibold text-[var(--ink)]">{q.customerName}</span>
+                    {q.customerCompany ? <span className="truncate text-[var(--ink-2)]">{q.customerCompany}</span> : null}
                   </Link>
                 </td>
-                <td className="px-4 py-3">
-                  <span className="block font-medium">{q.customerName}</span>
-                  {q.customerCompany ? <span className="block text-[12px] text-[var(--ink-3)]">{q.customerCompany}</span> : null}
+                <td className={listCellClass}>
+                  <Chip>{q.quoteNumber}</Chip>
                 </td>
-                <td className="px-4 py-3 text-[var(--ink-2)]">
-                  <span className="block">{q.eventName || '—'}</span>
+                <td className={`${listCellClass} max-w-[220px] text-[var(--ink-2)]`}>
+                  <span className="block truncate">{q.eventName || '—'}</span>
                   {q.eventDate ? <span className="block text-[12px] text-[var(--ink-3)]">{documentDate(q.eventDate)}</span> : null}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-[var(--ink-2)]">{documentDate(q.quoteDate)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">{formatCents(q.totalCents)}</td>
-                <td className="px-4 py-3">
+                <td className={`${listCellClass} whitespace-nowrap text-[var(--ink-2)]`}>{documentDate(q.quoteDate)}</td>
+                <td className={listCellClass}>
                   <QuoteStatusBadge status={q.status} />
                 </td>
+                <td className={`${listCellClass} whitespace-nowrap text-right font-semibold tabular-nums`}>{formatCents(q.totalCents)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </Card>
+      </div>
 
-      {/* Phone: compact cards. */}
-      <ul className="space-y-2 md:hidden">
+      {/* Phone: the same card, one compact row per quote. */}
+      <ul className={`${listCardClass} px-4 md:hidden`}>
         {quotes.map((q) => (
-          <QuoteCard key={q.id} quote={q} />
+          <QuoteRow key={q.id} quote={q} />
         ))}
       </ul>
     </>
   );
 }
 
-function QuoteCard({ quote: q }: { quote: QuoteSummaryDto }) {
+function QuoteRow({ quote: q }: { quote: QuoteSummaryDto }) {
   return (
-    <li>
-      <Link href={`/quotes/${q.id}`} className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 py-3 active:bg-[var(--paper-sunk)]">
+    <li className={listRowClass}>
+      <Link href={`/quotes/${q.id}`} className="flex items-center gap-3 py-3 active:opacity-70">
+        <Avatar name={q.customerName} size={34} />
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold tabular-nums text-[var(--ink-3)]">{q.quoteNumber}</span>
-            <QuoteStatusBadge status={q.status} />
-          </span>
-          <span className="mt-1 block truncate text-[16px] font-semibold">{q.customerName}</span>
-          <span className="block truncate text-[13px] text-[var(--ink-3)]">{[q.eventName, documentDate(q.quoteDate)].filter(Boolean).join(' · ')}</span>
+          <span className="block truncate text-[15px] font-semibold">{q.customerName}</span>
+          <span className="block truncate text-[12px] text-[var(--ink-3)]">{[q.quoteNumber, q.eventName, documentDate(q.quoteDate)].filter(Boolean).join(' · ')}</span>
         </span>
-        <span className="shrink-0 text-right">
-          <span className="block text-[15px] font-semibold tabular-nums">{formatCents(q.totalCents)}</span>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className="text-[15px] font-semibold tabular-nums">{formatCents(q.totalCents)}</span>
+          <QuoteStatusBadge status={q.status} />
         </span>
-        <ChevronRight size={18} className="shrink-0 text-[var(--ink-3)]" />
+        <ChevronRight size={16} className="shrink-0 text-[var(--ink-3)]" />
       </Link>
     </li>
   );

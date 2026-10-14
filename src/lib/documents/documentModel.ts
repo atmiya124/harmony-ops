@@ -6,9 +6,10 @@
 
 import type { QuoteDto } from '../db/quoteRepo';
 import type { InvoiceDto } from '../db/invoiceRepo';
+import type { DocumentAcceptance } from '../db/clientLinkRepo';
 import { formatCents } from '../money';
 import { formatBp } from '../sales/inputs';
-import { documentDate } from '../sales/format';
+import { documentDate, documentDateTime, torontoDate } from '../sales/format';
 import { groupBySection } from '../sales/quoteDraft';
 import type { DocumentConfig } from '../sales/documentConfig';
 
@@ -46,6 +47,16 @@ export interface StatusStep {
   detail: string | null; // a date
   value: string | null; // an amount or reference
   state: 'done' | 'current' | 'upcoming';
+}
+
+export interface SignedAcceptance {
+  name: string;
+  title: string | null;
+  date: string; // "13 Oct, 2026", for the Date line
+  acceptedAt: string; // "13 Oct, 2026, 3:05 p.m." (Toronto)
+  // A drawn signature is a PNG data URL; null when the stored signature is
+  // missing or unreadable (the line is then left with a note).
+  signature: { kind: 'drawn'; image: string } | { kind: 'typed'; text: string } | null;
 }
 
 export interface DocumentModel {
@@ -88,7 +99,8 @@ export interface DocumentModel {
   // payment section is switched off and they're short enough — in its place
   // beside the totals.
   termsPlacement: 'section' | 'summary';
-  acceptance: { authorizedBy: string; customerStatement: string } | null; // quotes
+  // Quotes. `signed` is filled in once the client has accepted online.
+  acceptance: { authorizedBy: string; customerStatement: string; signed: SignedAcceptance | null } | null;
   paymentStatus: { caption: string | null; steps: StatusStep[]; badge: string; badgeTone: 'due' | 'paid' | 'void'; badgeNote: string } | null; // invoices
   continuation: { left: string; right: string }; // compact header on page 2+
   footerNote: string;
@@ -203,7 +215,25 @@ function questionsOf(config: DocumentConfig, kind: string, reference: string | n
   return { title: `Questions about this ${kind}?`, text: reference ? `${text} Please quote the reference number ${reference}.` : text };
 }
 
-export function quoteDocument(q: QuoteDto, config: DocumentConfig): DocumentModel {
+const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/;
+
+// The client's online acceptance, printed only while it still describes
+// this quote: the quote is accepted (or converted) and its total is the one
+// the client agreed to. A quote that was reopened, edited and re-marked
+// accepted by staff prints blank signature lines again.
+export function signedAcceptance(q: QuoteDto, a: DocumentAcceptance | null): SignedAcceptance | null {
+  if (!a || (q.status !== 'accepted' && q.status !== 'converted') || a.quoteTotalCents !== q.totalCents) return null;
+  const data = a.signatureData?.trim() ?? '';
+  const signature: SignedAcceptance['signature'] =
+    a.signatureType === 'drawn' && PNG_DATA_URL.test(data)
+      ? { kind: 'drawn', image: data }
+      : a.signatureType === 'typed' && data
+        ? { kind: 'typed', text: data }
+        : null;
+  return { name: a.customerName?.trim() || q.customerName, title: a.customerTitle?.trim() || null, date: documentDate(torontoDate(a.acceptedAt)), acceptedAt: documentDateTime(a.acceptedAt), signature };
+}
+
+export function quoteDocument(q: QuoteDto, config: DocumentConfig, accepted: DocumentAcceptance | null = null): DocumentModel {
   const totals = chargeRows(q);
   const deposit: DocumentTotalRow[] =
     q.depositType !== 'none' && q.depositRequiredCents > 0
@@ -244,7 +274,7 @@ export function quoteDocument(q: QuoteDto, config: DocumentConfig): DocumentMode
     terms: splitTerms(q.terms),
     termsAside: 'Please read before signing',
     termsPlacement: termsPlacement(q.showPaymentDetails, splitTerms(q.terms)),
-    acceptance: { authorizedBy: `Authorized by · ${config.companyName}`, customerStatement: 'I accept this quote, its pricing and the terms above.' },
+    acceptance: { authorizedBy: `Authorized by · ${config.companyName}`, customerStatement: 'I accept this quote, its pricing and the terms above.', signed: signedAcceptance(q, accepted) },
     paymentStatus: null,
     continuation: { left: `Quote · ${q.quoteNumber}`, right: `${q.customerName} · continued` },
     footerNote: config.quoteFooterNote,

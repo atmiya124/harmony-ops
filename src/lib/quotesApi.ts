@@ -82,6 +82,52 @@ export function setQuoteStatus(id: string, status: QuoteStatus, expectedUpdatedA
   return saved(request(`/api/quotes/${id}/status`, json('POST', { status, expectedUpdatedAt })));
 }
 
+// Emails the quote to the client (link + PDF). `sendId` is made once per
+// click so a retried request sends only one email.
+export function sendQuote(id: string, expectedUpdatedAt: string, sendId: string): Promise<QuoteDto> {
+  return saved(request(`/api/quotes/${id}/send`, json('POST', { expectedUpdatedAt, sendId })));
+}
+
+// A new draft copied from this quote; `newId` makes a retry return the same copy.
+export function cloneQuote(id: string, newId: string): Promise<QuoteDto> {
+  return saved(request(`/api/quotes/${id}/clone`, json('POST', { id: newId })));
+}
+
+export async function deleteQuote(id: string, expectedUpdatedAt: string): Promise<void> {
+  await request(`/api/quotes/${id}`, json('DELETE', { expectedUpdatedAt }));
+  invalidateCache(QUOTES_KEY);
+  invalidateCache(quoteKey(id));
+}
+
 export function listInvoices(): Promise<InvoiceSummaryDto[]> {
   return request('/api/invoices');
+}
+
+// ---------------------------------------------------------------------------
+// Client link (Phase 3)
+// ---------------------------------------------------------------------------
+
+export type { ClientResponseDto, StaffClientLinkDto } from './db/clientLinkRepo';
+import type { ClientResponseDto, StaffClientLinkDto } from './db/clientLinkRepo';
+
+export interface ClientLinkState {
+  link: StaffClientLinkDto | null;
+  responses: ClientResponseDto[];
+}
+
+export function getClientLink(quoteId: string): Promise<ClientLinkState> {
+  return request(`/api/quotes/${quoteId}/client-link`);
+}
+
+// Creates a link, or replaces the current one (the old link stops working).
+// Sharing a draft marks it Sent, so the cached quote is refreshed too.
+export function createClientLink(quoteId: string): Promise<ClientLinkState> {
+  return request<ClientLinkState>(`/api/quotes/${quoteId}/client-link`, { method: 'POST' }).then((state) => {
+    invalidateCache(QUOTES_KEY);
+    return state;
+  });
+}
+
+export function revokeClientLink(quoteId: string): Promise<ClientLinkState> {
+  return request(`/api/quotes/${quoteId}/client-link`, { method: 'DELETE' });
 }
