@@ -23,7 +23,7 @@ export default function QuoteDetail({ quote, onChange }: { quote: QuoteDto; onCh
     // and event, items, the totals panel, then notes and terms. Desktop: the
     // main column on the left (the column div is `contents` on phones so its
     // blocks can be ordered around the panel) and the panel on the right.
-    <div className="grid gap-5 pb-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-x-10">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 pb-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-x-10">
       <div className="order-1 lg:order-none lg:col-start-1 lg:row-start-1">
         <Hero quote={quote} />
       </div>
@@ -87,14 +87,14 @@ function EmailSummary({ quote }: { quote: QuoteDto }) {
   const last = sends[0];
   return (
     <div className="mt-2 text-[13px] text-[var(--ink-3)]">
-      <p className="flex flex-wrap items-center gap-x-1.5">
-        <Mail size={13} className="shrink-0" aria-hidden />
+      <p className="flex items-start gap-x-1.5">
+        <Mail size={13} className="mt-[3px] shrink-0" aria-hidden />
         {sends.length === 1 ? (
-          <span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">
             Sent to <span className="text-[var(--ink-2)]">{last.recipientEmail}</span> · {activityDateTime(last.sentAt)}
           </span>
         ) : (
-          <span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">
             Last sent {activityDateTime(last.sentAt)} to <span className="text-[var(--ink-2)]">{last.recipientEmail}</span>
           </span>
         )}
@@ -326,7 +326,7 @@ function Items({ quote }: { quote: QuoteDto }) {
 
 function People({ quote }: { quote: QuoteDto }) {
   return (
-    <div className="grid gap-5 md:grid-cols-2">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-2">
       <Card>
         <Eyebrow>Customer</Eyebrow>
         <p className="text-[15px] font-semibold">{quote.customerName}</p>
@@ -334,8 +334,8 @@ function People({ quote }: { quote: QuoteDto }) {
         <div className="mt-2 space-y-1 text-[14px] text-[var(--ink-2)]">
           {quote.billingAddress ? <p className="whitespace-pre-line">{quote.billingAddress}</p> : null}
           {quote.customerEmail ? (
-            <a href={`mailto:${quote.customerEmail}`} className="flex items-center gap-1.5 text-[var(--accent-ink)] hover:underline">
-              <Mail size={14} /> {quote.customerEmail}
+            <a href={`mailto:${quote.customerEmail}`} className="flex items-start gap-1.5 text-[var(--accent-ink)] hover:underline">
+              <Mail size={14} className="mt-[3px] shrink-0" /> <span className="min-w-0 break-all">{quote.customerEmail}</span>
             </a>
           ) : null}
           {quote.customerPhone ? (
