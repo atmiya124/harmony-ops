@@ -32,6 +32,8 @@ before(async () => {
     `INSERT INTO bookings (id, event_title, client_name, client_phone, client_email, event_date, setup_time, start_time, end_time, venue_name, venue_address, event_type)
      VALUES (7, 'Smith Gala', 'Michael Smith', '555', 'm@example.com', '2026-11-20', '', '', '', 'Hall', '1 Main St', 'Corporate')`,
   );
+  // Event-booking-app's equipment table (quotes accepted become bookings).
+  await client.execute('CREATE TABLE booking_equipment (id integer PRIMARY KEY AUTOINCREMENT, booking_id integer NOT NULL REFERENCES bookings(id) ON DELETE CASCADE, item_name text NOT NULL, spec text, qty integer NOT NULL DEFAULT 1, sort_order integer NOT NULL DEFAULT 0)');
   const migrations = readdirSync('drizzle').filter((f) => f.endsWith('.sql')).sort();
   for (const file of migrations) await client.batch(splitMigration(readFileSync(join('drizzle', file), 'utf8')), 'write');
   repo = await import('./quoteRepo');
@@ -251,10 +253,6 @@ test('defaults fall back to 13% HST when finance settings are empty', async () =
   assert.equal((await repo.getQuoteDefaults()).taxRateBp, 1500);
 });
 
-// Last: a local SQLite file fails competing writers fast (SQLITE_BUSY) and
-// the local driver can leave the file locked afterwards. Turso queues write
-// transactions instead. Either way a save gets a unique number or fails
-// cleanly — two saves never share one.
 test('delete: soft, hidden from reads, stale versions and accepted quotes refused', async () => {
   const { quote } = await repo.createQuote(input(), actor);
   await assert.rejects(repo.deleteQuote(quote.id, 'old-version', actor), (e: { status?: number }) => e.status === 409);
@@ -316,7 +314,20 @@ test('payment method: cash stores no HST whatever rate was sent; other methods a
   assert.throws(() => input({ paymentMethod: 'cheque' }), /payment method/);
 });
 
-// Last: the deliberate lock contention leaves the local SQLite file busy for a moment.
+test('marking a quote Accepted by hand only changes its status: no booking is made', async () => {
+  const before = Number((await client.execute('SELECT count(*) AS n FROM bookings')).rows[0].n);
+  const { quote } = await repo.createQuote(input({ eventName: 'Manual Accept Gala' }), actor);
+  const sent = await repo.setQuoteStatus(quote.id, { status: 'sent', expectedUpdatedAt: quote.updatedAt }, actor);
+  const accepted = await repo.setQuoteStatus(quote.id, { status: 'accepted', expectedUpdatedAt: sent.updatedAt }, actor);
+  assert.equal(accepted.status, 'accepted');
+  assert.equal(accepted.eventId, null);
+  assert.equal(Number((await client.execute('SELECT count(*) AS n FROM bookings')).rows[0].n), before);
+});
+
+// Last: a local SQLite file fails competing writers fast (SQLITE_BUSY) and
+// the local driver can leave the file locked afterwards. Turso queues write
+// transactions instead. Either way a save gets a unique number or fails
+// cleanly — two saves never share one.
 test('concurrent saves never share a quote number', async () => {
   const results = await Promise.allSettled(Array.from({ length: 12 }, () => repo.createQuote(input(), actor)));
   const numbers = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value.quote.quoteNumber] : []));

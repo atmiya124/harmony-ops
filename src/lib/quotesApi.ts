@@ -100,6 +100,12 @@ export async function deleteQuote(id: string, expectedUpdatedAt: string): Promis
   invalidateCache(quoteKey(id));
 }
 
+// Recovery: creates the booking for a client-accepted quote whose automatic
+// booking didn't happen. Safe to repeat — it never makes a second booking.
+export function createBookingFromQuote(id: string): Promise<QuoteDto> {
+  return saved(request(`/api/quotes/${id}/booking`, { method: 'POST' }));
+}
+
 export function listInvoices(): Promise<InvoiceSummaryDto[]> {
   return request('/api/invoices');
 }

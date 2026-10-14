@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Copy, ExternalLink, Link2, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { CalendarPlus, CheckCircle2, Copy, ExternalLink, Link2, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { ApiError } from '@/lib/apiClient';
-import { createClientLink, getClientLink, getQuote, revokeClientLink, type ClientLinkState, type ClientResponseDto, type QuoteDto } from '@/lib/quotesApi';
+import { createBookingFromQuote, createClientLink, getClientLink, getQuote, revokeClientLink, type ClientLinkState, type ClientResponseDto, type QuoteDto } from '@/lib/quotesApi';
 import { documentDate } from '@/lib/sales/format';
 import { QUOTE_STATUS_LABELS } from '@/lib/sales/types';
 import { buttonClass, Card, Eyebrow, Notice } from './ui';
@@ -162,6 +162,11 @@ export default function ClientLinkCard({ quote, onQuoteChange }: { quote: QuoteD
               </dl>
               <Signature response={response} />
               {pdfNote(quote, response) ? <p className="text-[12px] leading-snug text-[var(--ink-3)] sm:col-span-2">{pdfNote(quote, response)}</p> : null}
+              {(quote.status === 'accepted' || quote.status === 'converted') && quote.eventId === null ? (
+                <div className="sm:col-span-2">
+                  <BookingRecovery quote={quote} onQuoteChange={onQuoteChange} />
+                </div>
+              ) : null}
             </div>
           ) : (
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[14px]">
@@ -184,6 +189,39 @@ export default function ClientLinkCard({ quote, onQuoteChange }: { quote: QuoteD
 // Why an acceptance isn't printed on the quote PDF, if it isn't. The PDF
 // signs only while the quote is still accepted at the total the client
 // agreed to (see signedAcceptance in documentModel.ts).
+// The client accepted, but no booking is linked — the automatic booking
+// didn't happen. Same booking logic as on acceptance, so a repeat is safe.
+function BookingRecovery({ quote, onQuoteChange }: { quote: QuoteDto; onQuoteChange: (q: QuoteDto) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      onQuoteChange(await createBookingFromQuote(quote.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The booking couldn’t be created');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[var(--line-strong)] bg-[var(--paper)] px-3 py-2.5">
+      <p className="min-w-0 flex-1 text-[13px] text-[var(--ink-2)]">No booking was created for this acceptance.</p>
+      <button type="button" onClick={create} disabled={busy} className={buttonClass('primary', 'px-3 py-2 text-[13px]')}>
+        <CalendarPlus size={14} /> {busy ? 'Creating…' : 'Create booking'}
+      </button>
+      {error ? (
+        <div className="basis-full">
+          <Notice>{error}</Notice>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function pdfNote(quote: QuoteDto, response: ClientResponseDto): string | null {
   if (quote.status !== 'accepted' && quote.status !== 'converted') {
     return `Not printed on the PDF: the quote was marked ${QUOTE_STATUS_LABELS[quote.status]} after the client accepted. Mark it Accepted to sign the PDF again.`;

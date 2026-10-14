@@ -8,6 +8,7 @@ import { db } from './client';
 import { quoteAcceptances, quoteAccessLinks, quoteActivity, quotes, salesAuditLog, type QuoteAccessLinkRow, type QuoteRow } from './schema';
 import { FinanceError, nextTimestamp, nowIso, type Actor, type Tx } from './financeRepo';
 import { getQuote } from './quoteRepo';
+import { bookAcceptedQuoteSafely } from './quoteBooking';
 import { CLIENT_QUOTE_PATH, decryptLinkToken, encryptLinkToken, generateLinkToken, hashLinkToken, isWellFormedToken } from '../sales/clientLinkToken';
 import { toPublicQuote, type PublicQuote, type PublicQuoteResponse } from '../sales/publicQuote';
 import type { QuoteActivityEvent, QuoteResponseAction, QuoteStatus, SignatureType } from '../sales/types';
@@ -270,7 +271,7 @@ async function respond(
   meta: RequestMeta,
   record: Omit<typeof quoteAcceptances.$inferInsert, 'id' | 'quoteId' | 'accessLinkId' | 'action' | 'quoteTotalCents' | 'quoteVersion' | 'ipAddress' | 'userAgent' | 'createdAt'>,
 ): Promise<PublicQuote> {
-  await db.transaction(async (tx) => {
+  const quoteId = await db.transaction(async (tx) => {
     const found = await resolveToken(tx, token);
     if (!found) throw notFound();
     const { quote, link } = found;
@@ -307,7 +308,10 @@ async function respond(
     });
     await logActivity(tx, quote.id, action === 'accepted' ? 'quote_accepted' : 'quote_declined', { type: 'client' }, at, link.id);
     await auditStatus(tx, quote, after, { type: 'client' }, at);
+    return quote.id;
   });
+  // Accepted: the quote becomes a booking. Never blocks the client's answer.
+  if (action === 'accepted') await bookAcceptedQuoteSafely(quoteId, { userId: CLIENT_ACTOR, email: CLIENT_ACTOR });
   return (await getPublicQuote(token, today))!;
 }
 

@@ -467,6 +467,8 @@ export async function cloneQuote(id: string, newId: string, today: string, actor
 }
 
 // Manual status change (Phase 1 has no sending or client acceptance yet).
+// Only changes the status. A manual "Accepted" never creates a booking:
+// that happens only when the client accepts through their link.
 export async function setQuoteStatus(id: string, input: QuoteStatusInput, actor: Actor): Promise<QuoteDto> {
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(quotes).where(eq(quotes.id, id));

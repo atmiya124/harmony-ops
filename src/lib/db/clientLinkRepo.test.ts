@@ -20,6 +20,7 @@ process.env.BETTER_AUTH_SECRET ??= 'test-secret-for-client-links';
 let client: Client;
 let repo: typeof import('./quoteRepo');
 let links: typeof import('./clientLinkRepo');
+let booking: typeof import('./quoteBooking');
 const staff = { id: 'user-1', email: 'partner@example.com' };
 const TODAY = '2026-10-13';
 const meta = { ipAddress: '203.0.113.7', userAgent: 'TestBrowser/1.0' };
@@ -29,9 +30,11 @@ before(async () => {
   await client.execute(
     "CREATE TABLE bookings (id integer PRIMARY KEY AUTOINCREMENT, event_title text NOT NULL, client_name text NOT NULL, client_phone text NOT NULL, client_email text NOT NULL, event_date text NOT NULL, setup_time text NOT NULL, start_time text NOT NULL, end_time text NOT NULL, venue_name text NOT NULL, venue_address text NOT NULL, event_type text NOT NULL, notes text, status text NOT NULL DEFAULT 'Tentative', created_by integer, created_at text NOT NULL DEFAULT '', updated_at text NOT NULL DEFAULT '', pickup_date text, pickup_time text)",
   );
+  await client.execute('CREATE TABLE booking_equipment (id integer PRIMARY KEY AUTOINCREMENT, booking_id integer NOT NULL REFERENCES bookings(id) ON DELETE CASCADE, item_name text NOT NULL, spec text, qty integer NOT NULL DEFAULT 1, sort_order integer NOT NULL DEFAULT 0)');
   for (const f of readdirSync('drizzle').filter((f) => f.endsWith('.sql')).sort()) await client.batch(splitMigration(readFileSync(join('drizzle', f), 'utf8')), 'write');
   repo = await import('./quoteRepo');
   links = await import('./clientLinkRepo');
+  booking = await import('./quoteBooking');
 });
 
 after(() => {
@@ -169,6 +172,11 @@ test('accepting: recorded, quote accepted and locked, second accept refused', as
   const saved = (await repo.getQuote(quote.id))!;
   assert.equal(saved.status, 'accepted');
   assert.ok(saved.acceptedAt);
+  // The client's acceptance made a Confirmed booking, linked to the quote.
+  assert.ok(saved.eventId);
+  const [booking] = (await client.execute({ sql: 'SELECT status, client_name FROM bookings WHERE id = ?', args: [saved.eventId] })).rows;
+  assert.equal(booking.status, 'Confirmed');
+  assert.equal(booking.client_name, saved.customerName);
   // Locked for staff editing.
   const edit = quoteCreateSchema.parse({
     id: randomUUID(),
@@ -276,4 +284,107 @@ test('the database refuses an incomplete acceptance', async () => {
       args: [randomUUID(), quote.id],
     }),
   );
+});
+
+// ---------------------------------------------------------------------------
+// Client acceptance → booking
+// ---------------------------------------------------------------------------
+
+const bookingsNamed = async (title: string) =>
+  Number((await client.execute({ sql: 'SELECT count(*) AS n FROM bookings WHERE event_title = ?', args: [title] })).rows[0].n);
+
+// A sent quote with a live link, its event given a unique name to count by.
+async function openQuote(eventName: string, eventId: number | null = null) {
+  const quote = await newQuote();
+  if (eventId !== null || eventName) await client.execute({ sql: 'UPDATE quotes SET event_name = ?, event_id = ? WHERE id = ?', args: [eventName, eventId, quote.id] });
+  const token = tokenOf((await links.createClientLink(quote.id, staff)).path);
+  const pub = (await links.getPublicQuote(token, TODAY))!;
+  return { quote, token, version: pub.version };
+}
+
+test('a client acceptance creates exactly one Confirmed booking, even when clicked twice', async () => {
+  const { quote, token, version } = await openQuote('Twice Gala');
+  await links.acceptQuoteByLink(token, accept(version), meta, TODAY);
+  await assert.rejects(links.acceptQuoteByLink(token, accept(version), meta, TODAY), /already been accepted/);
+  assert.equal(await bookingsNamed('Twice Gala'), 1);
+  const saved = (await repo.getQuote(quote.id))!;
+  const [b] = (await client.execute({ sql: 'SELECT status, notes FROM bookings WHERE id = ?', args: [saved.eventId] })).rows;
+  assert.equal(b.status, 'Confirmed');
+  assert.match(String(b.notes), new RegExp(`accepted quote ${saved.quoteNumber}`));
+});
+
+test('a quote already linked to a Tentative booking confirms it instead of making another', async () => {
+  const inserted = await client.execute(
+    "INSERT INTO bookings (event_title, client_name, client_phone, client_email, event_date, setup_time, start_time, end_time, venue_name, venue_address, event_type) VALUES ('Linked Gala', 'Sam', '', '', '2026-12-01', '', '', '', '', '', 'Corporate') RETURNING id",
+  );
+  const bookingId = Number(inserted.rows[0].id);
+  const { quote, token, version } = await openQuote('Linked Gala', bookingId);
+  await links.acceptQuoteByLink(token, accept(version), meta, TODAY);
+  assert.equal(await bookingsNamed('Linked Gala'), 1);
+  assert.equal((await repo.getQuote(quote.id))!.eventId, bookingId);
+  const [b] = (await client.execute({ sql: 'SELECT status FROM bookings WHERE id = ?', args: [bookingId] })).rows;
+  assert.equal(b.status, 'Confirmed');
+});
+
+test('a failed booking never undoes the acceptance; the recovery action then books it, once', async () => {
+  const { quote, token, version } = await openQuote('Recovery Gala');
+  // Make the booking step fail: its equipment table is briefly missing.
+  await client.execute('ALTER TABLE booking_equipment RENAME TO booking_equipment_away');
+  const realError = console.error;
+  console.error = () => {}; // the expected "[quotes] … failed" log
+  try {
+    const result = await links.acceptQuoteByLink(token, accept(version), meta, TODAY);
+    assert.equal(result.state, 'accepted');
+  } finally {
+    console.error = realError;
+    await client.execute('ALTER TABLE booking_equipment_away RENAME TO booking_equipment');
+  }
+  const afterFailure = (await repo.getQuote(quote.id))!;
+  assert.equal(afterFailure.status, 'accepted'); // acceptance kept
+  assert.equal(afterFailure.eventId, null); // nothing half-made
+  assert.equal(await bookingsNamed('Recovery Gala'), 0);
+  const acceptances = await client.execute({ sql: "SELECT count(*) AS n FROM quote_acceptances WHERE quote_id = ? AND action = 'accepted'", args: [quote.id] });
+  assert.equal(Number(acceptances.rows[0].n), 1);
+
+  // "Create booking" on Quote Details: same logic, safe to repeat.
+  const first = await booking.bookAcceptedQuote(quote.id, { userId: staff.id, email: staff.email });
+  const again = await booking.bookAcceptedQuote(quote.id, { userId: staff.id, email: staff.email });
+  assert.deepEqual(first, { bookingId: first!.bookingId, created: true });
+  assert.deepEqual(again, { bookingId: first!.bookingId, created: false });
+  assert.equal(await bookingsNamed('Recovery Gala'), 1);
+  assert.equal((await repo.getQuote(quote.id))!.eventId, first!.bookingId);
+});
+
+test('no client acceptance, no booking: a quote marked Accepted by hand is refused by recovery too', async () => {
+  const quote = await newQuote();
+  await client.execute({ sql: "UPDATE quotes SET event_name = 'Manual Gala' WHERE id = ?", args: [quote.id] });
+  const fresh = (await repo.getQuote(quote.id))!;
+  const accepted = await repo.setQuoteStatus(quote.id, { status: 'accepted', expectedUpdatedAt: fresh.updatedAt }, staff);
+  assert.equal(accepted.eventId, null);
+  assert.equal(await booking.bookAcceptedQuote(quote.id, { userId: staff.id, email: staff.email }), null);
+  assert.equal(await bookingsNamed('Manual Gala'), 0);
+});
+
+// Last: a local SQLite file fails competing writers fast (SQLITE_BUSY)
+// instead of queueing them like Turso, and can stay locked a moment after.
+// Whatever the database does, two acceptances racing can never both win or
+// make two bookings.
+test('two acceptances at the same moment never both win or make two bookings', async () => {
+  const { quote, token, version } = await openQuote('Race Gala');
+  const realError = console.error;
+  console.error = () => {};
+  let won = 0;
+  try {
+    const results = await Promise.allSettled([
+      links.acceptQuoteByLink(token, accept(version), meta, TODAY),
+      links.acceptQuoteByLink(token, accept(version), meta, TODAY),
+    ]);
+    won = results.filter((r) => r.status === 'fulfilled').length;
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(won <= 1, 'at most one acceptance');
+  assert.ok((await bookingsNamed('Race Gala')) <= 1, 'never two bookings');
+  const acceptances = await client.execute({ sql: "SELECT count(*) AS n FROM quote_acceptances WHERE quote_id = ? AND action = 'accepted'", args: [quote.id] });
+  assert.equal(Number(acceptances.rows[0].n), won);
 });
