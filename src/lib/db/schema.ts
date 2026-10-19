@@ -824,6 +824,27 @@ export const quoteEmailSends = sqliteTable(
   ],
 );
 
+// The price list the quote builder picks items from. New table. Picking an
+// item copies its name, description and price into the quote line, so
+// editing or deleting an item here never changes a saved quote.
+export const inventoryItems = sqliteTable(
+  'inventory_items',
+  {
+    id: text('id').primaryKey(),
+    section: text('section').notNull(), // the quote section it goes under, e.g. "LED Display"
+    itemName: text('item_name').notNull(),
+    description: text('description'),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(), // also the optimistic-lock version
+    updatedByEmail: text('updated_by_email').notNull(),
+  },
+  (t) => [
+    index('inventory_items_section_idx').on(t.section),
+    check('inventory_items_unit_price_range', centsRange(t.unitPriceCents)),
+  ],
+);
+
 export type BookingRow = typeof bookings.$inferSelect;
 export type NewBookingRow = typeof bookings.$inferInsert;
 export type BookingEquipmentRow = typeof bookingEquipment.$inferSelect;
@@ -850,3 +871,4 @@ export type InvoiceItemRow = typeof invoiceItems.$inferSelect;
 export type QuoteAccessLinkRow = typeof quoteAccessLinks.$inferSelect;
 export type QuoteAcceptanceRow = typeof quoteAcceptances.$inferSelect;
 export type QuoteEmailSendRow = typeof quoteEmailSends.$inferSelect;
+export type InventoryItemRow = typeof inventoryItems.$inferSelect;

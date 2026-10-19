@@ -23,7 +23,7 @@ const TAB_STEP_PX = 76;
 // The calculators are opened from Home, so they keep Home highlighted.
 function resolveTab(pathname: string): NavTab {
   if (pathname.startsWith('/events')) return 'bookings';
-  if (pathname.startsWith('/quotes') || pathname.startsWith('/invoices')) return 'sales';
+  if (pathname.startsWith('/quotes') || pathname.startsWith('/invoices') || pathname.startsWith('/inventory')) return 'sales';
   if (pathname.startsWith('/finances') || pathname.startsWith('/expenses/')) return 'finances';
   return 'home';
 }

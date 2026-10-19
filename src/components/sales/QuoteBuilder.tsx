@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowDown, ArrowUp, Link2, Plus, Trash2, Unlink, X } from 'lucide-react';
 import { useBookings } from '@/hooks/useBookings';
+import { useCachedData } from '@/hooks/useCachedData';
 import type { Booking } from '@/lib/bookingTypes';
 import { ApiError } from '@/lib/apiClient';
 import { createQuote, updateQuote, type QuoteDto } from '@/lib/quotesApi';
+import { INVENTORY_KEY, listInventory, type InventoryItemDto } from '@/lib/inventoryApi';
 import { formatCents } from '@/lib/money';
 import { adjustmentCents } from '@/lib/quoteCalculator';
-import { formatBp, parsePriceToCents, parseQuantity } from '@/lib/sales/inputs';
+import { formatBp, parsePriceToCents, parseQuantity, priceToInput } from '@/lib/sales/inputs';
 import type { QuoteDefaults } from '@/lib/sales/defaults';
 import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_PAYMENT_METHODS, SECTION_PRESETS, type AdjustmentType, type QuotePaymentMethod } from '@/lib/sales/types';
 import {
@@ -27,6 +29,7 @@ import {
   type SectionDraft,
 } from '@/lib/sales/quoteDraft';
 import { clearStoredDraft, readStoredDraft, writeStoredDraft, type DraftSlot } from '@/lib/sales/quoteDraftStore';
+import InventoryPicker from './InventoryPicker';
 import { buttonClass, Card, DateInput, documentDate, Eyebrow, Field, inputClass, Notice } from './ui';
 
 type Props =
@@ -74,6 +77,8 @@ export default function QuoteBuilder(props: Props) {
   const [conflict, setConflict] = useState<QuoteDto | null>(null);
   const [saving, setSaving] = useState(false);
   const { bookings } = useBookings();
+  // The price list item names are picked from; typing still works without it.
+  const { data: inventory } = useCachedData(INVENTORY_KEY, listInventory);
 
   // Opened from a booking (?event=12): link it once the bookings arrive.
   const [pendingEventId, setPendingEventId] = useState(props.mode === 'create' ? (props.initialEventId ?? null) : null);
@@ -324,7 +329,16 @@ export default function QuoteBuilder(props: Props) {
                 clearErrors('items');
                 setSection(section.key, (s) => ({ ...s, items: [...s.items, blankItem()] }));
               }}
+              inventory={inventory ?? []}
               onItemChange={(itemKey, change) => setItem(section.key, itemKey, change)}
+              onItemPick={(itemKey, picked) => {
+                setItem(section.key, itemKey, { itemName: picked.itemName, description: picked.description ?? '', unitPrice: priceToInput(picked.unitPriceCents) });
+                // An unnamed section takes the picked item's section.
+                if (!section.name.trim()) {
+                  clearErrors(`section:${section.key}`);
+                  setSection(section.key, (s) => ({ ...s, name: picked.section }));
+                }
+              }}
               onItemMove={(itemIndex, delta) => setSection(section.key, (s) => ({ ...s, items: move(s.items, itemIndex, delta) }))}
               onItemRemove={(itemKey) => setSection(section.key, (s) => ({ ...s, items: s.items.filter((i) => i.key !== itemKey) }))}
             />
@@ -569,7 +583,9 @@ function SectionEditor({
   onMove,
   onRemove,
   onAddItem,
+  inventory,
   onItemChange,
+  onItemPick,
   onItemMove,
   onItemRemove,
 }: {
@@ -581,16 +597,19 @@ function SectionEditor({
   onMove: (delta: -1 | 1) => void;
   onRemove: () => void;
   onAddItem: () => void;
+  inventory: InventoryItemDto[];
   onItemChange: (itemKey: string, change: Partial<ItemDraft>) => void;
+  onItemPick: (itemKey: string, item: InventoryItemDto) => void;
   onItemMove: (index: number, delta: -1 | 1) => void;
   onItemRemove: (itemKey: string) => void;
 }) {
   const sectionError = errors[`section:${section.key}`];
   const listId = `section-presets-${section.key}`;
   return (
-    <Card padded={false} className="overflow-hidden">
+    // Not overflow-hidden: the inventory picker's list drops below the card.
+    <Card padded={false}>
       {/* Section header, like the grey band with an orange marker on the PDF. */}
-      <div className="flex items-center gap-2 border-b border-[var(--line)] bg-[var(--paper-sunk)] px-3 py-2">
+      <div className="flex items-center gap-2 rounded-t-2xl border-b border-[var(--line)] bg-[var(--paper-sunk)] px-3 py-2">
         <span className="h-4 w-1 shrink-0 rounded-full bg-[var(--accent)]" aria-hidden />
         <input
           aria-label="Section name"
@@ -633,10 +652,13 @@ function SectionEditor({
           <ItemEditor
             key={item.key}
             item={item}
+            section={section.name}
+            inventory={inventory}
             errors={errors}
             isFirst={index === 0}
             isLast={index === section.items.length - 1}
             onChange={(change) => onItemChange(item.key, change)}
+            onPick={(picked) => onItemPick(item.key, picked)}
             onMove={(delta) => onItemMove(index, delta)}
             onRemove={() => onItemRemove(item.key)}
           />
@@ -653,18 +675,24 @@ function SectionEditor({
 
 function ItemEditor({
   item,
+  section,
+  inventory,
   errors,
   isFirst,
   isLast,
   onChange,
+  onPick,
   onMove,
   onRemove,
 }: {
   item: ItemDraft;
+  section: string;
+  inventory: InventoryItemDto[];
   errors: DraftErrors;
   isFirst: boolean;
   isLast: boolean;
   onChange: (change: Partial<ItemDraft>) => void;
+  onPick: (item: InventoryItemDto) => void;
   onMove: (delta: -1 | 1) => void;
   onRemove: () => void;
 }) {
@@ -677,13 +705,13 @@ function ItemEditor({
   return (
     <li className="grid grid-cols-[1fr_1fr_1fr] gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_72px_120px_110px_96px] md:items-start">
       <div className="col-span-3 space-y-1.5 md:col-span-1">
-        <input
-          aria-label="Item name"
-          placeholder="Item name, e.g. Indoor LED Wall P2.6"
-          className={`${inputClass} font-semibold`}
+        <InventoryPicker
           value={item.itemName}
-          onChange={(e) => onChange({ itemName: e.target.value })}
-          aria-invalid={!!err('itemName')}
+          section={section}
+          inventory={inventory}
+          invalid={!!err('itemName')}
+          onType={(itemName) => onChange({ itemName })}
+          onPick={onPick}
         />
         <input
           aria-label="Description"

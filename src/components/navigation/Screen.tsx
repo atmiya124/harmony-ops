@@ -39,6 +39,7 @@ const SECTION_TABS = {
     tabs: [
       { label: 'Quotes', href: '/quotes' },
       { label: 'Invoices', href: '/invoices' },
+      { label: 'Inventory', href: '/inventory' },
     ],
   },
 } as const;
