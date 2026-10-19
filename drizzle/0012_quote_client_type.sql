@@ -1,0 +1,1 @@
+ALTER TABLE `quotes` ADD `client_type` text DEFAULT 'regular' NOT NULL;

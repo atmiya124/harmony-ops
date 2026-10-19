@@ -28,6 +28,7 @@ import {
   QUOTE_ACTIVITY_EVENTS,
   QUOTE_EMAIL_SEND_KINDS,
   QUOTE_PAYMENT_METHODS,
+  QUOTE_CLIENT_TYPES,
   QUOTE_RESPONSE_ACTIONS,
   SIGNATURE_TYPES,
 } from '../sales/types';
@@ -495,6 +496,10 @@ export const quotes = sqliteTable(
     // means no HST. Added in migration 0010 — checked by the app (a CHECK
     // can't be added to an existing table on the shared database).
     paymentMethod: text('payment_method', { enum: QUOTE_PAYMENT_METHODS }),
+    // Regular or contract client — chose the default terms; `terms` above is
+    // the snapshot actually saved. Internal only. Added in migration 0012,
+    // checked by the app (same CHECK limitation as payment_method).
+    clientType: text('client_type', { enum: QUOTE_CLIENT_TYPES }).notNull().default('regular'),
 
     // Lifecycle timestamps (ISO). Set by status changes; Phase 3's client
     // link records the acceptance details in its own table.

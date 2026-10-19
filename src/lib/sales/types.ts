@@ -109,6 +109,17 @@ export const QUOTE_PAYMENT_METHOD_LABELS: Record<QuotePaymentMethod, string> = {
   cash: 'Cash',
 };
 
+// The kind of client a quote is for; it picks the default Terms &
+// Conditions (see QUOTE_TERMS in defaults). Internal only — never shown to
+// the client. Stored on each quote today; a future customer profile could
+// supply it instead.
+export const QUOTE_CLIENT_TYPES = ['regular', 'contract'] as const;
+export type QuoteClientType = (typeof QUOTE_CLIENT_TYPES)[number];
+export const QUOTE_CLIENT_TYPE_LABELS: Record<QuoteClientType, string> = {
+  regular: 'Regular',
+  contract: 'Contract',
+};
+
 // Harmony Production charges no HST on cash payments: a cash quote's tax
 // rate is always 0, whatever rate was typed. Used by the builder preview,
 // validation and the server's stored totals alike.

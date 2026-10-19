@@ -12,7 +12,7 @@ import { nextDocumentNumber } from './documentNumbers';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { QUOTE_DEFAULTS, type QuoteDefaults } from '../sales/defaults';
 import { distinctInitials } from '../sales/format';
-import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteEmailSendKind, type QuotePaymentMethod, type QuoteStatus, type SalesAuditAction, effectiveTaxRateBp } from '../sales/types';
+import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteClientType, type QuoteEmailSendKind, type QuotePaymentMethod, type QuoteStatus, type SalesAuditAction, effectiveTaxRateBp } from '../sales/types';
 import type { QuoteCreateInput, QuoteStatusInput, QuoteUpdateInput } from '../schemas/quote';
 
 // ---------------------------------------------------------------------------
@@ -78,6 +78,7 @@ export interface QuoteDto extends QuoteSummaryDto {
   depositValue: number;
   depositRequiredCents: number;
   notes: string | null;
+  clientType: QuoteClientType; // internal: which default terms it started from
   terms: string | null;
   showPaymentDetails: boolean; // print the payment section on the PDF
   paymentMethod: QuotePaymentMethod | null; // null = not chosen; cash = no HST
@@ -200,6 +201,7 @@ function pricedQuote(input: QuoteCreateInput | QuoteUpdateInput) {
     depositValue: input.depositValue,
     depositRequiredCents: totals.depositRequiredCents,
     notes: input.notes,
+    clientType: input.clientType,
     terms: input.terms,
     showPaymentDetails: input.showPaymentDetails,
     paymentMethod: input.paymentMethod,
@@ -304,6 +306,7 @@ export async function getQuote(id: string, reader: Tx | typeof db = db): Promise
     depositValue: row.depositValue,
     depositRequiredCents: row.depositRequiredCents,
     notes: row.notes,
+    clientType: row.clientType,
     terms: row.terms,
     showPaymentDetails: row.showPaymentDetails,
     paymentMethod: row.paymentMethod,
@@ -477,6 +480,8 @@ export async function cloneQuote(id: string, newId: string, today: string, actor
     depositType: source.depositType,
     depositValue: source.depositValue,
     notes: source.notes,
+    // The source's client type and its saved terms exactly, not the defaults.
+    clientType: source.clientType,
     terms: source.terms,
     showPaymentDetails: source.showPaymentDetails,
     paymentMethod: source.paymentMethod,

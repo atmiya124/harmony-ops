@@ -85,6 +85,13 @@
       "when": 1792438557763,
       "tag": "0011_inventory_items",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792446741513,
+      "tag": "0012_quote_client_type",
+      "breakpoints": true
     }
   ]
 }

@@ -13,13 +13,15 @@ import { formatCents } from '@/lib/money';
 import { adjustmentCents } from '@/lib/quoteCalculator';
 import { formatBp, parsePriceToCents, parseQuantity, priceToInput } from '@/lib/sales/inputs';
 import type { QuoteDefaults } from '@/lib/sales/defaults';
-import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_PAYMENT_METHODS, SECTION_PRESETS, type AdjustmentType, type QuotePaymentMethod } from '@/lib/sales/types';
+import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, QUOTE_CLIENT_TYPE_LABELS, QUOTE_CLIENT_TYPES, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_PAYMENT_METHODS, SECTION_PRESETS, type AdjustmentType, type QuoteClientType, type QuotePaymentMethod } from '@/lib/sales/types';
 import {
   blankDraft,
   blankItem,
   blankSection,
+  changeClientType,
   draftFromQuote,
   draftToValues,
+  hasDefaultTerms,
   mapServerErrors,
   parseAdjustment,
   previewTotals,
@@ -27,6 +29,8 @@ import {
   type ItemDraft,
   type QuoteDraft,
   type SectionDraft,
+  termsAreDefault,
+  withDefaultTerms,
 } from '@/lib/sales/quoteDraft';
 import { clearStoredDraft, readStoredDraft, writeStoredDraft, type DraftSlot } from '@/lib/sales/quoteDraftStore';
 import InventoryPicker from './InventoryPicker';
@@ -75,6 +79,10 @@ export default function QuoteBuilder(props: Props) {
   const [errors, setErrors] = useState<DraftErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<QuoteDto | null>(null);
+  // Asking before hand-edited terms are replaced with the client type's
+  // defaults: after switching the type ('switch', shown under the switch) or
+  // from the Terms field ('restore', shown there).
+  const [termsPrompt, setTermsPrompt] = useState<'switch' | 'restore' | null>(null);
   const [saving, setSaving] = useState(false);
   const { bookings } = useBookings();
   // The price list item names are picked from; typing still works without it.
@@ -166,6 +174,23 @@ export default function QuoteBuilder(props: Props) {
     }
   }
 
+  // Untouched terms follow the new type's defaults; edited ones are kept
+  // and the switch asks whether to replace them.
+  function chooseClientType(next: QuoteClientType) {
+    const change = changeClientType(draft, next);
+    if (change.draft !== draft) {
+      clearErrors('terms');
+      setDraft(change.draft);
+    }
+    setTermsPrompt(change.askToReplaceTerms ? 'switch' : null);
+  }
+
+  function replaceTerms() {
+    clearErrors('terms');
+    setDraft((d) => withDefaultTerms(d));
+    setTermsPrompt(null);
+  }
+
   function loadTheirVersion() {
     if (!conflict) return;
     const latest = draftFromQuote(conflict);
@@ -176,6 +201,7 @@ export default function QuoteBuilder(props: Props) {
     setConflict(null);
     setFormError(null);
     setErrors({});
+    setTermsPrompt(null);
   }
 
   function startOver() {
@@ -186,6 +212,7 @@ export default function QuoteBuilder(props: Props) {
     if (props.mode === 'edit') setVersion(props.quote.updatedAt);
     else setPendingEventId(props.initialEventId ?? null);
     setRecoveredAt(null);
+    setTermsPrompt(null);
     setErrors({});
     setFormError(null);
     setConflict(null);
@@ -226,7 +253,19 @@ export default function QuoteBuilder(props: Props) {
         ) : null}
 
         <Card>
-          <Eyebrow>Customer</Eyebrow>
+          {/* The client type sits with the customer it describes; it picks
+              the default terms below. Internal only — never on the PDF. */}
+          <Eyebrow aside={<ClientTypeSwitch value={draft.clientType} onChange={chooseClientType} />}>Customer</Eyebrow>
+          {termsPrompt === 'switch' ? (
+            <div className="mb-3">
+              <TermsPrompt
+                message={`You've edited the terms, so they were kept. Replace them with the default ${QUOTE_CLIENT_TYPE_LABELS[draft.clientType]} terms?`}
+                onReplace={replaceTerms}
+                onKeep={() => setTermsPrompt(null)}
+                keepLabel="Keep my terms"
+              />
+            </div>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Customer name" error={errors.customerName}>
               <input className={inputClass} value={draft.customerName} onChange={(e) => set('customerName', e.target.value)} aria-invalid={!!errors.customerName} autoComplete="off" />
@@ -374,9 +413,30 @@ export default function QuoteBuilder(props: Props) {
           <Field label="Notes (shown on the quote)" error={errors.notes}>
             <textarea className={`${inputClass} min-h-[72px] resize-y`} rows={3} value={draft.notes} onChange={(e) => set('notes', e.target.value)} />
           </Field>
-          <Field label="Terms & conditions" hint="One term per line." error={errors.terms}>
-            <textarea className={`${inputClass} min-h-[140px] resize-y`} rows={6} value={draft.terms} onChange={(e) => set('terms', e.target.value)} />
-          </Field>
+          <div>
+            <Field label="Terms & conditions" hint={`One term per line. Starts from the ${QUOTE_CLIENT_TYPE_LABELS[draft.clientType]} client defaults; this quote keeps the text as saved.`} error={errors.terms}>
+              <textarea className={`${inputClass} min-h-[140px] resize-y`} rows={6} value={draft.terms} onChange={(e) => set('terms', e.target.value)} />
+            </Field>
+            {termsPrompt === 'restore' ? (
+              <div className="mt-2">
+                <TermsPrompt
+                  message={`Replace your edited terms with the default ${QUOTE_CLIENT_TYPE_LABELS[draft.clientType]} terms?`}
+                  onReplace={replaceTerms}
+                  onKeep={() => setTermsPrompt(null)}
+                  keepLabel="Cancel"
+                />
+              </div>
+            ) : !hasDefaultTerms(draft) ? (
+              <button
+                type="button"
+                // Empty or untouched terms have nothing to lose, so no question.
+                onClick={() => (termsAreDefault(draft.terms) ? replaceTerms() : setTermsPrompt('restore'))}
+                className="mt-1 text-[12px] font-medium text-[var(--accent-ink)] hover:underline"
+              >
+                Restore default {QUOTE_CLIENT_TYPE_LABELS[draft.clientType]} terms
+              </button>
+            ) : null}
+          </div>
           {/* Printed beside the totals on the PDF; off = questions and a thank-you only. */}
           <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--line)] bg-[var(--paper-sunk)] px-3 py-2.5">
             <input
@@ -501,6 +561,47 @@ export default function QuoteBuilder(props: Props) {
         </div>
       </aside>
     </div>
+  );
+}
+
+// Regular | Contract, as a small segmented control.
+function ClientTypeSwitch({ value, onChange }: { value: QuoteClientType; onChange: (t: QuoteClientType) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Client type" className="inline-flex rounded-full bg-[var(--paper-sunk)] p-0.5">
+      {QUOTE_CLIENT_TYPES.map((t) => {
+        const on = value === t;
+        return (
+          <button
+            key={t}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(t)}
+            className={`rounded-full px-3 py-1.5 text-[13px] leading-none transition ${on ? 'bg-[var(--paper)] font-bold text-[var(--ink)] shadow-[0_1px_2px_rgba(0,0,0,0.08)]' : 'font-medium text-[var(--ink-3)] hover:text-[var(--ink)]'}`}
+          >
+            {QUOTE_CLIENT_TYPE_LABELS[t]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// The question before edited terms are replaced: nothing changes until
+// "Replace terms" is pressed.
+function TermsPrompt({ message, onReplace, onKeep, keepLabel }: { message: string; onReplace: () => void; onKeep: () => void; keepLabel: string }) {
+  return (
+    <Notice tone="info">
+      <p>{message}</p>
+      <div className="mt-1.5 flex gap-4">
+        <button type="button" onClick={onReplace} className="font-semibold underline">
+          Replace terms
+        </button>
+        <button type="button" onClick={onKeep} className="font-semibold">
+          {keepLabel}
+        </button>
+      </div>
+    </Notice>
   );
 }
 

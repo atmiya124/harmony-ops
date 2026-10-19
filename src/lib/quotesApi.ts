@@ -2,7 +2,7 @@
 // the server assigns numbers and status and recalculates every total.
 import type { QuoteDto, QuoteListItemDto, QuoteSummaryDto } from './db/quoteRepo';
 import type { InvoiceSummaryDto } from './db/invoiceRepo';
-import type { AdjustmentType, QuotePaymentMethod, QuoteStatus } from './sales/types';
+import type { AdjustmentType, QuoteClientType, QuotePaymentMethod, QuoteStatus } from './sales/types';
 import { invalidateCache, setCache } from './clientCache';
 import { json, request } from './apiClient';
 
@@ -54,6 +54,7 @@ export interface QuoteFormValues {
   depositType: AdjustmentType;
   depositValue: number;
   notes: string | null;
+  clientType: QuoteClientType;
   terms: string | null;
   showPaymentDetails: boolean;
   paymentMethod: QuotePaymentMethod | null;

@@ -5,9 +5,9 @@
 import { calculateQuoteTotals, type QuoteTotals } from '../quoteCalculator';
 import { addDays } from '../finance/dates';
 import { MAX_HST_RATE_BP, MAX_AMOUNT_CENTS } from '../finance/types';
-import type { QuoteDefaults } from './defaults';
+import { QUOTE_TERMS, type QuoteDefaults } from './defaults';
 import { bpToInput, parsePercentToBp, parsePriceToCents, parseQuantity, priceToInput, type Parsed } from './inputs';
-import { effectiveTaxRateBp, type AdjustmentType, type QuotePaymentMethod } from './types';
+import { effectiveTaxRateBp, QUOTE_CLIENT_TYPES, type AdjustmentType, type QuoteClientType, type QuotePaymentMethod } from './types';
 
 export interface ItemDraft {
   key: string; // React key; stable while editing
@@ -47,6 +47,7 @@ export interface QuoteDraft {
   depositType: AdjustmentType;
   depositValue: string;
   notes: string;
+  clientType: QuoteClientType; // picks the default terms; internal only
   terms: string;
   showPaymentDetails: boolean;
   // Cash = no HST; the typed tax rate is kept so switching back restores it.
@@ -75,6 +76,7 @@ export interface QuoteValues {
   depositType: AdjustmentType;
   depositValue: number;
   notes: string | null;
+  clientType: QuoteClientType;
   terms: string | null;
   showPaymentDetails: boolean;
   paymentMethod: QuotePaymentMethod | null;
@@ -118,7 +120,8 @@ export function blankDraft(defaults: QuoteDefaults, today: string): QuoteDraft {
     depositType: defaults.depositType,
     depositValue: adjustmentToInput(defaults.depositType, defaults.depositValue),
     notes: '',
-    terms: defaults.terms,
+    clientType: defaults.clientType,
+    terms: QUOTE_TERMS[defaults.clientType],
     showPaymentDetails: true,
     paymentMethod: null,
   };
@@ -171,10 +174,54 @@ export function draftFromQuote(q: SavedQuote): QuoteDraft {
     depositType: q.depositType,
     depositValue: adjustmentToInput(q.depositType, q.depositValue),
     notes: q.notes ?? '',
+    clientType: q.clientType,
+    // The saved text exactly, even if the defaults have changed since.
     terms: q.terms ?? '',
     showPaymentDetails: q.showPaymentDetails,
     paymentMethod: q.paymentMethod,
   };
+}
+
+// ---------------------------------------------------------------- client type
+
+// Terms compared line by line, ignoring blank lines and surrounding spaces.
+const normalizeTerms = (terms: string) =>
+  terms
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join('\n');
+
+// Whether the terms are untouched: empty, or exactly one of the default
+// templates. Only then may a client type change replace them silently.
+export function termsAreDefault(terms: string, templates: Record<QuoteClientType, string> = QUOTE_TERMS): boolean {
+  const t = normalizeTerms(terms);
+  return t === '' || QUOTE_CLIENT_TYPES.some((c) => normalizeTerms(templates[c]) === t);
+}
+
+export interface ClientTypeChange {
+  draft: QuoteDraft;
+  // The terms were edited by hand and differ from the new type's defaults:
+  // they were kept, and the builder asks whether to replace them.
+  askToReplaceTerms: boolean;
+}
+
+// Switches the client type. Untouched terms follow it to the new type's
+// defaults; hand-edited terms are never replaced here (see withDefaultTerms).
+export function changeClientType(d: QuoteDraft, next: QuoteClientType, templates: Record<QuoteClientType, string> = QUOTE_TERMS): ClientTypeChange {
+  if (next === d.clientType) return { draft: d, askToReplaceTerms: false };
+  if (termsAreDefault(d.terms, templates)) return { draft: { ...d, clientType: next, terms: templates[next] }, askToReplaceTerms: false };
+  return { draft: { ...d, clientType: next }, askToReplaceTerms: normalizeTerms(d.terms) !== normalizeTerms(templates[next]) };
+}
+
+// Whether the terms are exactly the defaults for the draft's client type.
+export function hasDefaultTerms(d: QuoteDraft, templates: Record<QuoteClientType, string> = QUOTE_TERMS): boolean {
+  return normalizeTerms(d.terms) === normalizeTerms(templates[d.clientType]);
+}
+
+// Replaces the terms with the client type's defaults (staff confirmed it).
+export function withDefaultTerms(d: QuoteDraft, templates: Record<QuoteClientType, string> = QUOTE_TERMS): QuoteDraft {
+  return { ...d, terms: templates[d.clientType] };
 }
 
 export function adjustmentToInput(type: AdjustmentType, value: number): string {
@@ -277,6 +324,7 @@ export function draftToValues(d: QuoteDraft): DraftResult {
       depositType: d.depositType,
       depositValue: deposit.ok ? deposit.value : 0,
       notes: orNull(d.notes),
+      clientType: d.clientType,
       terms: orNull(d.terms),
       showPaymentDetails: d.showPaymentDetails,
       paymentMethod: d.paymentMethod,

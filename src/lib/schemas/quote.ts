@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MAX_AMOUNT_CENTS, MAX_HST_RATE_BP } from '../finance/types';
-import { ADJUSTMENT_TYPES, type AdjustmentType, effectiveTaxRateBp, MAX_ITEM_QUANTITY, MAX_PERCENT_BP, MAX_QUOTE_ITEMS, MANUAL_QUOTE_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_STATUSES, type QuoteStatus } from '../sales/types';
+import { ADJUSTMENT_TYPES, type AdjustmentType, effectiveTaxRateBp, MAX_ITEM_QUANTITY, MAX_PERCENT_BP, MAX_QUOTE_ITEMS, MANUAL_QUOTE_STATUSES, QUOTE_CLIENT_TYPES, QUOTE_PAYMENT_METHODS, QUOTE_STATUSES, type QuoteStatus } from '../sales/types';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { isCalendarDate } from './finance';
 
@@ -73,6 +73,9 @@ const quoteFields = {
   depositValue: z.number().int().min(0),
 
   notes: optionalText(4000),
+  // Which default terms were offered; the terms below are saved as sent.
+  // Omitted (an older open builder) = regular.
+  clientType: z.enum(QUOTE_CLIENT_TYPES, 'Choose a client type').default('regular'),
   terms: optionalText(8000),
   // Print the payment section on the PDF. Omitted = yes.
   showPaymentDetails: z.boolean().default(true),

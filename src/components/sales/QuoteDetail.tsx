@@ -9,7 +9,7 @@ import { formatCents } from '@/lib/money';
 import { formatBp } from '@/lib/sales/inputs';
 import { activityDateTime, torontoDate } from '@/lib/sales/format';
 import { groupBySection } from '@/lib/sales/quoteDraft';
-import { canSetQuoteStatus, isQuoteEditable, MANUAL_QUOTE_STATUSES, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_STATUS_LABELS, type QuoteStatus } from '@/lib/sales/types';
+import { canSetQuoteStatus, isQuoteEditable, MANUAL_QUOTE_STATUSES, QUOTE_CLIENT_TYPE_LABELS, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_STATUS_LABELS, type QuoteStatus } from '@/lib/sales/types';
 import ClientLinkCard from './ClientLinkCard';
 import { buttonClass, ButtonLink, Card, documentDate, Eyebrow, InvoiceStatusBadge, Notice, quoteStatusColor } from './ui';
 
@@ -329,7 +329,9 @@ function People({ quote }: { quote: QuoteDto }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-2">
       <Card>
-        <Eyebrow>Customer</Eyebrow>
+        {/* Internal: which default terms the quote started from. Staff see it
+            here only; it's not on the PDF or the client's page. */}
+        <Eyebrow aside={`${QUOTE_CLIENT_TYPE_LABELS[quote.clientType]} client`}>Customer</Eyebrow>
         <p className="text-[15px] font-semibold">{quote.customerName}</p>
         {quote.customerCompany ? <p className="text-[14px] text-[var(--ink-2)]">{quote.customerCompany}</p> : null}
         <div className="mt-2 space-y-1 text-[14px] text-[var(--ink-2)]">

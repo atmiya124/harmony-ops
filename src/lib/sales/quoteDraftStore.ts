@@ -38,7 +38,8 @@ export function readStoredDraft(slot: DraftSlot): StoredQuoteDraft | null {
       clearStoredDraft(slot);
       return null;
     }
-    return { ...parsed, draft: rekey(parsed.draft) };
+    // Drafts kept before client types existed are regular-client quotes.
+    return { ...parsed, draft: rekey({ ...parsed.draft, clientType: parsed.draft.clientType ?? 'regular' }) };
   } catch {
     return null;
   }

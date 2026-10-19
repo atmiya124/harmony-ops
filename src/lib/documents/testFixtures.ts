@@ -139,6 +139,7 @@ export function quoteFixture(o: QuoteFixtureOptions = {}): QuoteDto {
     depositValue,
     depositRequiredCents: t.depositRequiredCents,
     notes: null,
+    clientType: 'regular',
     terms: REFERENCE_TERMS,
     showPaymentDetails: true,
     paymentMethod: null,
