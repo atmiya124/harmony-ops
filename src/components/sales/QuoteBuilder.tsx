@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowDown, ArrowUp, Link2, Plus, Trash2, Unlink, X } from 'lucide-react';
 import { useBookings } from '@/hooks/useBookings';
@@ -26,6 +26,7 @@ import {
   type QuoteDraft,
   type SectionDraft,
 } from '@/lib/sales/quoteDraft';
+import { clearStoredDraft, readStoredDraft, writeStoredDraft, type DraftSlot } from '@/lib/sales/quoteDraftStore';
 import { buttonClass, Card, DateInput, documentDate, Eyebrow, Field, inputClass, Notice } from './ui';
 
 type Props =
@@ -60,8 +61,13 @@ export default function QuoteBuilder(props: Props) {
   const router = useRouter();
   const editing = props.mode === 'edit';
   // Generated once, so a retried save can't create a second quote.
-  const [newId] = useState(() => crypto.randomUUID());
-  const [draft, setDraft] = useState<QuoteDraft>(() => (props.mode === 'edit' ? draftFromQuote(props.quote) : blankDraft(props.defaults, props.today)));
+  const [newId, setNewId] = useState(() => crypto.randomUUID());
+  const startingDraft = () => (props.mode === 'edit' ? draftFromQuote(props.quote) : blankDraft(props.defaults, props.today));
+  const [draft, setDraft] = useState<QuoteDraft>(startingDraft);
+  // The draft as loaded (or recovered); anything else is unsaved work, kept
+  // on this device until it's saved or cancelled.
+  const [baseline, setBaseline] = useState(draft);
+  const [recoveredAt, setRecoveredAt] = useState<number | null>(null);
   const [version, setVersion] = useState(props.mode === 'edit' ? props.quote.updatedAt : '');
   const [errors, setErrors] = useState<DraftErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -74,8 +80,34 @@ export default function QuoteBuilder(props: Props) {
   if (pendingEventId !== null && bookings.length > 0) {
     const booking = bookings.find((b) => b.id === pendingEventId);
     setPendingEventId(null);
-    if (booking) setDraft((d) => linkBooking(d, booking));
+    if (booking) {
+      const linked = linkBooking(draft, booking);
+      setDraft(linked);
+      setBaseline(linked);
+    }
   }
+
+  // Unsaved work from a page that was closed by mistake. Read after mount:
+  // storage only exists in the browser, and the server render must match.
+  const editId = props.mode === 'edit' ? props.quote.id : null;
+  const slot: DraftSlot = editId ? { mode: 'edit', quoteId: editId } : { mode: 'create' };
+  useEffect(() => {
+    const stored = readStoredDraft(editId ? { mode: 'edit', quoteId: editId } : { mode: 'create' });
+    if (!stored) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time recovery from browser storage */
+    setDraft(stored.draft);
+    setBaseline(stored.draft);
+    if (stored.newId) setNewId(stored.newId);
+    if (stored.version) setVersion(stored.version);
+    setPendingEventId(null);
+    setRecoveredAt(stored.savedAt);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [editId]);
+
+  useEffect(() => {
+    if (draft === baseline) return;
+    writeStoredDraft(editId ? { mode: 'edit', quoteId: editId } : { mode: 'create' }, editId ? { draft, version } : { draft, newId });
+  }, [draft, baseline, editId, version, newId]);
 
   const totals = useMemo(() => previewTotals(draft), [draft]);
   const cancelHref = props.mode === 'edit' ? `/quotes/${props.quote.id}` : '/quotes';
@@ -114,6 +146,7 @@ export default function QuoteBuilder(props: Props) {
     setSaving(true);
     try {
       const saved = props.mode === 'edit' ? await updateQuote(props.quote.id, result.values, version) : await createQuote(newId, result.values);
+      clearStoredDraft(slot);
       // Back from the details should return to the list, not to this form.
       router.replace(`/quotes/${saved.id}`);
     } catch (err) {
@@ -130,11 +163,32 @@ export default function QuoteBuilder(props: Props) {
 
   function loadTheirVersion() {
     if (!conflict) return;
-    setDraft(draftFromQuote(conflict));
+    const latest = draftFromQuote(conflict);
+    setDraft(latest);
+    setBaseline(latest);
+    clearStoredDraft(slot);
     setVersion(conflict.updatedAt);
     setConflict(null);
     setFormError(null);
     setErrors({});
+  }
+
+  function startOver() {
+    const fresh = startingDraft();
+    clearStoredDraft(slot);
+    setDraft(fresh);
+    setBaseline(fresh);
+    if (props.mode === 'edit') setVersion(props.quote.updatedAt);
+    else setPendingEventId(props.initialEventId ?? null);
+    setRecoveredAt(null);
+    setErrors({});
+    setFormError(null);
+    setConflict(null);
+  }
+
+  function cancel() {
+    clearStoredDraft(slot);
+    router.push(cancelHref);
   }
 
   const presetsLeft = SECTION_PRESETS.filter((p) => !draft.sections.some((s) => s.name.trim().toLowerCase() === p.toLowerCase()));
@@ -145,6 +199,16 @@ export default function QuoteBuilder(props: Props) {
     // Totals + Save/Cancel in a right-hand panel that stays in view.
     <div className="grid gap-4 pb-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
       <div className="space-y-4 lg:col-start-1 lg:row-start-1">
+        {recoveredAt !== null ? (
+          <Notice tone="info">
+            <p>
+              Restored the unsaved {editing ? 'changes' : 'quote'} from {new Date(recoveredAt).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })}. Save to keep {editing ? 'them' : 'it'}.
+            </p>
+            <button type="button" onClick={startOver} className="mt-1 font-semibold underline">
+              {editing ? 'Discard these changes' : 'Start over with a blank quote'}
+            </button>
+          </Notice>
+        ) : null}
         {formError ? (
           <Notice>
             <p>{formError}</p>
@@ -417,7 +481,7 @@ export default function QuoteBuilder(props: Props) {
           <button type="button" onClick={save} className={buttonClass('primary', 'w-full py-3.5 text-[16px]')} disabled={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Save draft'}
           </button>
-          <button type="button" onClick={() => router.push(cancelHref)} className={buttonClass('ghost', 'w-full py-3 text-[15px]')} disabled={saving}>
+          <button type="button" onClick={cancel} className={buttonClass('ghost', 'w-full py-3 text-[15px]')} disabled={saving}>
             Cancel
           </button>
         </div>

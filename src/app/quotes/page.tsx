@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react';
 import Screen from '@/components/navigation/Screen';
 import QuoteList from '@/components/sales/QuoteList';
+import UnsavedQuoteNotice from '@/components/sales/UnsavedQuoteNotice';
 import { IconLink } from '@/components/sales/ui';
 
 export default function QuotesPage() {
@@ -15,6 +16,7 @@ export default function QuotesPage() {
         </IconLink>
       }
     >
+      <UnsavedQuoteNotice />
       <QuoteList />
     </Screen>
   );
