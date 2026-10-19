@@ -210,6 +210,29 @@ export function IconLink({ href, label, children }: { href: string; label: strin
   );
 }
 
+// The screen's main action on phones, floating bottom-right just above the
+// tab bar (like a native app), whatever the scroll position. Desktop keeps
+// the header icon instead. The spacer stops the list's last row ending up
+// underneath it.
+export function FloatingActionLink({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <div aria-hidden className="h-16 md:hidden" />
+      <div className="pointer-events-none fixed inset-x-0 bottom-[100px] z-40 flex justify-end px-4 md:hidden">
+        {/* Icon only; the label is for screen readers and the tooltip. */}
+        <Link
+          href={href}
+          aria-label={label}
+          title={label}
+          className="pointer-events-auto inline-flex size-14 touch-manipulation select-none items-center justify-center rounded-full bg-[var(--ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition-transform duration-75 active:scale-[0.92] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)]"
+        >
+          {children}
+        </Link>
+      </div>
+    </>
+  );
+}
+
 // The white card a list sits in, its column headings and row dividers. Rows
 // run edge to edge (the outer cells carry the card's side padding), so a
 // clickable row's hover highlight fills the full width and is clipped
