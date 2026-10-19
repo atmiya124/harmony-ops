@@ -2,21 +2,24 @@
 // the server assigns numbers and status and recalculates every total.
 import type { QuoteDto, QuoteListItemDto, QuoteSummaryDto } from './db/quoteRepo';
 import type { InvoiceSummaryDto } from './db/invoiceRepo';
+import type { CustomerDto } from './sales/customers';
 import type { AdjustmentType, QuoteClientType, QuotePaymentMethod, QuoteStatus } from './sales/types';
 import { invalidateCache, setCache } from './clientCache';
 import { json, request } from './apiClient';
 
-export type { InvoiceSummaryDto, QuoteDto, QuoteListItemDto, QuoteSummaryDto };
+export type { CustomerDto, InvoiceSummaryDto, QuoteDto, QuoteListItemDto, QuoteSummaryDto };
 
 // Cache keys (see clientCache). A saved quote replaces its cached copy and
 // clears the cached list, so going back never shows the old version.
 export const QUOTES_KEY = 'quotes:list';
 export const quoteKey = (id: string) => `quotes:detail:${id}`;
 export const INVOICES_KEY = 'invoices:list';
+// Derived from quotes, so any quote change clears it too.
+export const CUSTOMERS_KEY = 'customers:list';
 
 function saved(result: Promise<QuoteDto>): Promise<QuoteDto> {
   return result.then((quote) => {
-    invalidateCache(QUOTES_KEY);
+    invalidateCache(QUOTES_KEY, CUSTOMERS_KEY);
     setCache(quoteKey(quote.id), quote);
     return quote;
   });
@@ -97,7 +100,7 @@ export function cloneQuote(id: string, newId: string): Promise<QuoteDto> {
 
 export async function deleteQuote(id: string, expectedUpdatedAt: string): Promise<void> {
   await request(`/api/quotes/${id}`, json('DELETE', { expectedUpdatedAt }));
-  invalidateCache(QUOTES_KEY);
+  invalidateCache(QUOTES_KEY, CUSTOMERS_KEY);
   invalidateCache(quoteKey(id));
 }
 
@@ -131,11 +134,17 @@ export function getClientLink(quoteId: string): Promise<ClientLinkState> {
 // Sharing a draft marks it Sent, so the cached quote is refreshed too.
 export function createClientLink(quoteId: string): Promise<ClientLinkState> {
   return request<ClientLinkState>(`/api/quotes/${quoteId}/client-link`, { method: 'POST' }).then((state) => {
-    invalidateCache(QUOTES_KEY);
+    invalidateCache(QUOTES_KEY, CUSTOMERS_KEY);
     return state;
   });
 }
 
 export function revokeClientLink(quoteId: string): Promise<ClientLinkState> {
   return request(`/api/quotes/${quoteId}/client-link`, { method: 'DELETE' });
+}
+
+// Customers, derived from saved quotes (see sales/customers).
+
+export function listCustomers(): Promise<CustomerDto[]> {
+  return request('/api/customers');
 }

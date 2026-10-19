@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CalendarDays, FileText, Home as HomeIcon, Wallet } from 'lucide-react';
-import { NavTab } from './navTypes';
+import { NavTab, salesPageFor } from './navTypes';
 import { prefetchFinancesData } from '@/lib/financeApi';
 
 type TabIcon = (props: { size?: number; className?: string }) => React.ReactNode;
@@ -23,7 +23,7 @@ const TAB_STEP_PX = 76;
 // The calculators are opened from Home, so they keep Home highlighted.
 function resolveTab(pathname: string): NavTab {
   if (pathname.startsWith('/events')) return 'bookings';
-  if (pathname.startsWith('/quotes') || pathname.startsWith('/invoices') || pathname.startsWith('/inventory')) return 'sales';
+  if (salesPageFor(pathname)) return 'sales';
   if (pathname.startsWith('/finances') || pathname.startsWith('/expenses/')) return 'finances';
   return 'home';
 }

@@ -12,6 +12,7 @@ import { nextDocumentNumber } from './documentNumbers';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { QUOTE_DEFAULTS, type QuoteDefaults } from '../sales/defaults';
 import { distinctInitials } from '../sales/format';
+import { groupCustomers, type CustomerDto } from '../sales/customers';
 import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteClientType, type QuoteEmailSendKind, type QuotePaymentMethod, type QuoteStatus, type SalesAuditAction, effectiveTaxRateBp } from '../sales/types';
 import type { QuoteCreateInput, QuoteStatusInput, QuoteUpdateInput } from '../schemas/quote';
 
@@ -261,6 +262,28 @@ export async function listQuotes(): Promise<QuoteListItemDto[]> {
     const name = creatorName(r.createdByEmail);
     return { ...toSummary(r), createdByName: name, createdByInitials: initials.get(name.trim()) ?? '?' };
   });
+}
+
+// Everyone a quote has been made for (deleted quotes left out), from the
+// quotes themselves — see sales/customers.
+export async function listCustomers(): Promise<CustomerDto[]> {
+  const rows = await db
+    .select({
+      id: quotes.id,
+      quoteNumber: quotes.quoteNumber,
+      status: quotes.status,
+      quoteDate: quotes.quoteDate,
+      eventName: quotes.eventName,
+      totalCents: quotes.totalCents,
+      customerName: quotes.customerName,
+      customerCompany: quotes.customerCompany,
+      customerEmail: quotes.customerEmail,
+      customerPhone: quotes.customerPhone,
+      clientType: quotes.clientType,
+    })
+    .from(quotes)
+    .where(isNull(quotes.deletedAt));
+  return groupCustomers(rows);
 }
 
 export async function getQuote(id: string, reader: Tx | typeof db = db): Promise<QuoteDto | null> {

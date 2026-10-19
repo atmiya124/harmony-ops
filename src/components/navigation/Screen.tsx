@@ -34,14 +34,6 @@ const SECTION_TABS = {
       { label: 'Today', href: '/events/today' },
     ],
   },
-  sales: {
-    label: 'Sales',
-    tabs: [
-      { label: 'Quotes', href: '/quotes' },
-      { label: 'Invoices', href: '/invoices' },
-      { label: 'Inventory', href: '/inventory' },
-    ],
-  },
 } as const;
 
 const SLATE_BACKDROP: React.CSSProperties = {

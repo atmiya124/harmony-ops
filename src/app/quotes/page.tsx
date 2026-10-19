@@ -9,7 +9,6 @@ export default function QuotesPage() {
   return (
     <Screen
       title="Quotes"
-      section="sales"
       tone="light"
       action={
         <span className="hidden md:contents">

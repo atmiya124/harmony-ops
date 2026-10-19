@@ -1,23 +1,30 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import { authClient } from '@/lib/auth/authClient';
 import type { Partner } from '@/lib/auth/session';
+import { salesPageFor } from '../navTypes';
+import SalesMenu from './SalesMenu';
 
+// On Sales screens the profile button opens the Sales menu (a side panel
+// with the Sales pages and Log out); elsewhere, a small account dropdown.
 export default function ProfileMenu({ partner }: { partner: Partner }) {
   const [open, setOpen] = useState(false);
+  const salesPage = salesPageFor(usePathname());
+  const closeMenu = useCallback(() => setOpen(false), []);
   const [signingOut, setSigningOut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || salesPage) return;
     const close = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
-  }, [open]);
+  }, [open, salesPage]);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -41,7 +48,11 @@ export default function ProfileMenu({ partner }: { partner: Partner }) {
         <Avatar partner={partner} />
       </button>
 
-      {open ? (
+      {open && salesPage !== null ? (
+        <SalesMenu partner={partner} active={salesPage} avatar={<Avatar partner={partner} />} signingOut={signingOut} onSignOut={handleSignOut} onClose={closeMenu} />
+      ) : null}
+
+      {open && salesPage === null ? (
         <div className="absolute right-0 top-full z-40 mt-2 w-60 rounded-xl border border-[var(--flat-border-strong)] bg-[#0b131c] p-3 shadow-lg shadow-black/40">
           <p className="truncate text-[13px] font-bold text-white">{partner.name}</p>
           <p className="mt-0.5 truncate text-[11px] text-[var(--flat-text-faint)]">{partner.email}</p>
