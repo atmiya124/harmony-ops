@@ -299,8 +299,9 @@ function Items({ quote }: { quote: QuoteDto }) {
                     </p>
                   ) : null}
                 </div>
-                {/* Phone: one line of qty × price = total. */}
-                <p className="mt-1 flex justify-between text-[13px] text-[var(--ink-2)] md:hidden">
+                {/* Phone: one line of qty × price = total, on a faint tint so
+                    the figures stand apart from the description. */}
+                <p className="mt-2 flex items-baseline justify-between gap-3 rounded-lg bg-[var(--paper-sunk)] px-3 py-2 text-[13px] text-[var(--ink-2)] md:hidden">
                   <span className="tabular-nums">
                     {item.quantity} × {formatCents(item.unitPriceCents)}
                   </span>
