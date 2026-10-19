@@ -240,6 +240,23 @@ export function Avatar({ name, size = 24 }: { name: string; size?: number }) {
   );
 }
 
+// Who created a record, as their initials in a small outlined circle — kept
+// quieter than the customer's coloured Avatar so the two aren't confused.
+// The full name is in the tooltip and read out to screen readers.
+export function CreatorInitials({ name, initials, size = 28 }: { name: string; initials: string; size?: number }) {
+  return (
+    <span
+      title={`Created by ${name}`}
+      className="inline-flex shrink-0 items-center justify-center rounded-full border border-[var(--line-strong)] bg-[var(--paper)] font-bold text-[var(--ink-2)]"
+      // Grows into a pill for three letters ("AtP"), still one line high.
+      style={{ minWidth: size, height: size, paddingInline: initials.length > 2 ? Math.round(size * 0.22) : 0, fontSize: Math.max(9, Math.round(size * 0.38)) }}
+    >
+      <span aria-hidden>{initials}</span>
+      <span className="sr-only">Created by {name}</span>
+    </span>
+  );
+}
+
 // A quiet grey tag, e.g. a quote number.
 export function Chip({ children }: { children: React.ReactNode }) {
   return <span className="inline-flex items-center whitespace-nowrap rounded-md bg-[var(--paper-sunk)] px-2 py-1 text-[12px] font-medium tabular-nums text-[var(--ink-2)]">{children}</span>;

@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, FileText, Plus } from 'lucide-react';
 import { useCachedData } from '@/hooks/useCachedData';
-import { listQuotes, QUOTES_KEY, type QuoteSummaryDto } from '@/lib/quotesApi';
+import { listQuotes, QUOTES_KEY, type QuoteListItemDto } from '@/lib/quotesApi';
 import { formatCents } from '@/lib/money';
-import { Avatar, ButtonLink, Card, Chip, documentDate, listCardClass, listCellClass, listHeadClass, listRowClass, listRowHoverClass, LoadError, QuoteStatusBadge } from './ui';
+import { Avatar, ButtonLink, Card, Chip, CreatorInitials, documentDate, listCardClass, listCellClass, listHeadClass, listRowClass, listRowHoverClass, LoadError, QuoteStatusBadge } from './ui';
 
 // All quotes, newest first. A row opens the read-only details — editing is
 // always one deliberate step further.
@@ -49,6 +49,10 @@ export default function QuoteList() {
               <th className={listHeadClass}>Event</th>
               <th className={listHeadClass}>Quote date</th>
               <th className={listHeadClass}>Status</th>
+              <th className={`${listHeadClass} text-center`}>
+                <span aria-hidden>By</span>
+                <span className="sr-only">Created by</span>
+              </th>
               <th className={`${listHeadClass} text-right`}>Total</th>
             </tr>
           </thead>
@@ -74,6 +78,9 @@ export default function QuoteList() {
                 <td className={listCellClass}>
                   <QuoteStatusBadge status={q.status} />
                 </td>
+                <td className={`${listCellClass} text-center`}>
+                  <CreatorInitials name={q.createdByName} initials={q.createdByInitials} />
+                </td>
                 <td className={`${listCellClass} whitespace-nowrap text-right font-semibold tabular-nums`}>{formatCents(q.totalCents)}</td>
               </tr>
             ))}
@@ -91,14 +98,17 @@ export default function QuoteList() {
   );
 }
 
-function QuoteRow({ quote: q }: { quote: QuoteSummaryDto }) {
+function QuoteRow({ quote: q }: { quote: QuoteListItemDto }) {
   return (
     <li className={listRowClass}>
       <Link href={`/quotes/${q.id}`} className="flex items-center gap-3 py-3 active:opacity-70">
         <Avatar name={q.customerName} size={34} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-semibold">{q.customerName}</span>
-          <span className="block truncate text-[12px] text-[var(--ink-3)]">{[q.quoteNumber, q.eventName, documentDate(q.quoteDate)].filter(Boolean).join(' · ')}</span>
+          <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[var(--ink-3)]">
+            <CreatorInitials name={q.createdByName} initials={q.createdByInitials} size={18} />
+            <span className="min-w-0 truncate">{[q.quoteNumber, q.eventName, documentDate(q.quoteDate)].filter(Boolean).join(' · ')}</span>
+          </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-[15px] font-semibold tabular-nums">{formatCents(q.totalCents)}</span>

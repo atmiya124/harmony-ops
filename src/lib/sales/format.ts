@@ -27,3 +27,36 @@ export function documentDateTime(iso: string): string {
   const time = new Date(iso).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto' });
   return `${documentDate(torontoDate(iso))}, ${time}`;
 }
+
+const nameWords = (name: string) => name.trim().split(/[\s._-]+/).filter(Boolean);
+
+// "Atmiya Patel" -> "AP": first letters of the first and last name. One name
+// gives one letter; an email-style name ("atmiya.patel") splits on . _ -.
+// `firstLetters` takes more of the first name: 2 -> "AtP".
+export function nameInitials(name: string, firstLetters = 1): string {
+  const words = nameWords(name);
+  if (words.length === 0) return '?';
+  const first = words[0].slice(0, firstLetters);
+  const last = words.length > 1 ? words[words.length - 1][0].toUpperCase() : '';
+  return first[0].toUpperCase() + first.slice(1).toLowerCase() + last;
+}
+
+// Initials for a set of people, unique among them: "AP" normally, but when
+// two different names would share one ("Atmiya Patel", "Ankit Patel") those
+// take more of the first name until they differ ("AtP", "AnP").
+export function distinctInitials(names: readonly string[]): Map<string, string> {
+  const unique = [...new Set(names.map((n) => n.trim()))];
+  const result = new Map<string, string>();
+  const longest = Math.max(1, ...unique.map((n) => nameWords(n)[0]?.length ?? 1));
+  for (const name of unique) {
+    let letters = 1;
+    let initials = nameInitials(name, letters);
+    // Lengthen while another name would produce the same initials.
+    while (letters < longest && unique.some((other) => other !== name && nameInitials(other, letters).toUpperCase() === initials.toUpperCase())) {
+      letters++;
+      initials = nameInitials(name, letters);
+    }
+    result.set(name, initials);
+  }
+  return result;
+}

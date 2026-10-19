@@ -1,12 +1,12 @@
 // Browser-side calls to the quotes and invoices API. Only inputs are sent:
 // the server assigns numbers and status and recalculates every total.
-import type { QuoteDto, QuoteSummaryDto } from './db/quoteRepo';
+import type { QuoteDto, QuoteListItemDto, QuoteSummaryDto } from './db/quoteRepo';
 import type { InvoiceSummaryDto } from './db/invoiceRepo';
 import type { AdjustmentType, QuotePaymentMethod, QuoteStatus } from './sales/types';
 import { invalidateCache, setCache } from './clientCache';
 import { json, request } from './apiClient';
 
-export type { InvoiceSummaryDto, QuoteDto, QuoteSummaryDto };
+export type { InvoiceSummaryDto, QuoteDto, QuoteListItemDto, QuoteSummaryDto };
 
 // Cache keys (see clientCache). A saved quote replaces its cached copy and
 // clears the cached list, so going back never shows the old version.
@@ -59,7 +59,7 @@ export interface QuoteFormValues {
   paymentMethod: QuotePaymentMethod | null;
 }
 
-export function listQuotes(): Promise<QuoteSummaryDto[]> {
+export function listQuotes(): Promise<QuoteListItemDto[]> {
   return request('/api/quotes');
 }
 

@@ -3,13 +3,15 @@
 // quoteCalculator — figures from the browser are never stored. Field-level
 // validation happens earlier, in src/lib/schemas/quote.ts.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from './client';
-import { bookings, financeSettings, invoices, quoteAccessLinks, quoteEmailSends, quoteItems, quotes, salesAuditLog, type QuoteItemRow, type QuoteRow } from './schema';
+import { normalizeEmail, partnerDisplayName } from '../auth/allowlist';
+import { authUser, bookings, financeSettings, invoices, quoteAccessLinks, quoteEmailSends, quoteItems, quotes, salesAuditLog, type QuoteItemRow, type QuoteRow } from './schema';
 import { FinanceError, nextTimestamp, nowIso, type Actor, type Tx } from './financeRepo';
 import { nextDocumentNumber } from './documentNumbers';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { QUOTE_DEFAULTS, type QuoteDefaults } from '../sales/defaults';
+import { distinctInitials } from '../sales/format';
 import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteEmailSendKind, type QuotePaymentMethod, type QuoteStatus, type SalesAuditAction, effectiveTaxRateBp } from '../sales/types';
 import type { QuoteCreateInput, QuoteStatusInput, QuoteUpdateInput } from '../schemas/quote';
 
@@ -45,6 +47,12 @@ export interface QuoteSummaryDto {
   totalCents: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// A row of the quotes list: who created it is shown as their initials.
+export interface QuoteListItemDto extends QuoteSummaryDto {
+  createdByName: string;
+  createdByInitials: string; // unique among the list's creators ("AtP" vs "AnP")
 }
 
 export interface QuoteDto extends QuoteSummaryDto {
@@ -238,9 +246,19 @@ const staleMessage = 'Someone else changed this quote. Review their changes and 
 // ---------------------------------------------------------------------------
 
 // Newest first: numbers are handed out in order, so the highest is newest.
-export async function listQuotes(): Promise<QuoteSummaryDto[]> {
+export async function listQuotes(): Promise<QuoteListItemDto[]> {
   const rows = await db.select().from(quotes).where(isNull(quotes.deletedAt)).orderBy(desc(quotes.quoteNumber));
-  return rows.map(toSummary);
+  // The creator's full Google name (initials need a last name, and
+  // PARTNER_NAMES holds first names only), else their display name.
+  const emails = [...new Set(rows.map((r) => r.createdByEmail))];
+  const users = emails.length ? await db.select({ email: authUser.email, name: authUser.name }).from(authUser).where(inArray(authUser.email, emails)) : [];
+  const googleName = new Map(users.map((u) => [normalizeEmail(u.email), u.name?.trim()]));
+  const creatorName = (email: string) => googleName.get(normalizeEmail(email)) || partnerDisplayName(email);
+  const initials = distinctInitials(rows.map((r) => creatorName(r.createdByEmail)));
+  return rows.map((r) => {
+    const name = creatorName(r.createdByEmail);
+    return { ...toSummary(r), createdByName: name, createdByInitials: initials.get(name.trim()) ?? '?' };
+  });
 }
 
 export async function getQuote(id: string, reader: Tx | typeof db = db): Promise<QuoteDto | null> {
