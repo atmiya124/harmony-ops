@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowDown, ArrowUp, Link2, Plus, Trash2, Unlink, X } from 'lucide-react';
 import { useBookings } from '@/hooks/useBookings';
@@ -604,7 +604,9 @@ function SectionEditor({
   onItemRemove: (itemKey: string) => void;
 }) {
   const sectionError = errors[`section:${section.key}`];
-  const listId = `section-presets-${section.key}`;
+  // Not built from section.key: those come from a counter that runs on in the
+  // server between requests, so the server and browser would disagree.
+  const listId = useId();
   return (
     // Not overflow-hidden: the inventory picker's list drops below the card.
     <Card padded={false}>
