@@ -20,10 +20,12 @@ export default function InventoryList() {
   const [editing, setEditing] = useState<InventoryItemDto | 'new' | null>(null);
 
   const sections = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    // Every typed word must appear somewhere, as in the quote builder's picker.
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const groups = new Map<string, InventoryItemDto[]>();
     for (const item of items ?? []) {
-      if (q && !`${item.itemName} ${item.description ?? ''} ${item.section}`.toLowerCase().includes(q)) continue;
+      const haystack = `${item.itemName} ${item.description ?? ''} ${item.section}`.toLowerCase();
+      if (!words.every((w) => haystack.includes(w))) continue;
       const list = groups.get(item.section) ?? [];
       list.push(item);
       groups.set(item.section, list);
