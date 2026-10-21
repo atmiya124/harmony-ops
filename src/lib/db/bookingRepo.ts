@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, lt, ne } from 'drizzle-orm';
 import { db } from './client';
 import { bookings, bookingEquipment, bookingServices } from './schema';
 import { Booking, EquipmentLine } from '../bookingTypes';
+import { todayInFinanceTz } from '../finance/today';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -38,7 +39,19 @@ function rowToBooking(
   };
 }
 
+// A Confirmed event whose date is behind us (Toronto calendar) happened —
+// mark it Completed so nobody has to flip it by hand. Runs on read, so the
+// status is current whenever bookings are shown. Undated bookings are left
+// alone.
+export async function completePastBookings(today: string = todayInFinanceTz()): Promise<void> {
+  await db
+    .update(bookings)
+    .set({ status: 'Completed', updatedAt: nowIso() })
+    .where(and(eq(bookings.status, 'Confirmed'), ne(bookings.eventDate, ''), lt(bookings.eventDate, today)));
+}
+
 export async function listBookings(): Promise<Booking[]> {
+  await completePastBookings();
   const rows = await db.select().from(bookings);
   const allEquipment = await db.select().from(bookingEquipment);
   const allServices = await db.select().from(bookingServices);
@@ -54,6 +67,7 @@ export async function listBookings(): Promise<Booking[]> {
 }
 
 export async function getBookingById(id: number): Promise<Booking | null> {
+  await completePastBookings();
   const [row] = await db.select().from(bookings).where(eq(bookings.id, id));
   if (!row) return null;
   const equipment = await db.select().from(bookingEquipment).where(eq(bookingEquipment.bookingId, id));
