@@ -138,3 +138,21 @@ test('a quote accepted online prints the client signature, name, title and time'
   // Not accepted online: the blank sign-and-return lines.
   assert.ok(markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG))).includes('Sign and return'));
 });
+
+test('an accepted quote is signed for the company by its creator, dated the day it was sent', () => {
+  const quote = quoteFixture({ overrides: { status: 'accepted', sentAt: '2026-10-14T23:30:00.000Z' } });
+  const acceptance = { customerName: 'Michael Smith', customerTitle: null, quoteTotalCents: quote.totalCents, acceptedAt: '2026-10-16T19:05:00.000Z', signatureType: 'typed' as const, signatureData: 'Michael Smith' };
+  const html = markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG, acceptance)));
+  const company = html.slice(html.indexOf('Authorized by'), html.indexOf('Customer approval:'));
+  assert.ok(company.includes('<span class="sig-typed">Atmiya Patel</span>'));
+  assert.ok(company.includes('<span class="filled">Atmiya Patel</span>'));
+  assert.ok(company.includes('14 Oct, 2026'), 'sent date, in Toronto time');
+
+  // Never sent: dated with the quote date.
+  const unsent = markup(renderDocumentHtml(quoteDocument({ ...quote, sentAt: null }, SAMPLE_CONFIG, acceptance)));
+  assert.ok(unsent.slice(unsent.indexOf('Authorized by'), unsent.indexOf('Customer approval:')).includes('13 Oct, 2026'));
+
+  // Not accepted: the company lines stay blank too.
+  const blank = markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG)));
+  assert.ok(!blank.includes('Atmiya Patel'));
+});

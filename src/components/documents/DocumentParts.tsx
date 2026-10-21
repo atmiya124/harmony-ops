@@ -416,6 +416,7 @@ export function QuoteAcceptance({ doc }: { doc: DocumentModel }) {
 }
 
 function SignedQuoteAcceptance({ doc, signed }: { doc: DocumentModel; signed: SignedAcceptance }) {
+  const authorized = doc.acceptance!.authorizedSigned;
   return (
     <>
       <BandHead title="Quote acceptance" aside={`Accepted online · ${signed.acceptedAt}`} />
@@ -423,9 +424,13 @@ function SignedQuoteAcceptance({ doc, signed }: { doc: DocumentModel; signed: Si
         <div>
           <div className="who">{doc.acceptance!.authorizedBy}</div>
           <div className="sign-lines">
-            <SignLine label="Signature" />
-            <SignLine label="Name" />
-            <SignLine label="Date" />
+            <SignLine
+              label="Signature"
+              className="sig"
+              value={authorized ? <span className="filled"><span className="sig-typed">{authorized.name}</span></span> : null}
+            />
+            <SignLine label="Name" value={authorized ? <span className="filled">{authorized.name}</span> : null} />
+            <SignLine label="Date" value={authorized ? <span className="filled">{authorized.date}</span> : null} />
           </div>
         </div>
         <div>

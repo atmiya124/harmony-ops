@@ -147,6 +147,7 @@ export function quoteFixture(o: QuoteFixtureOptions = {}): QuoteDto {
     sentAt: null,
     acceptedAt: '2026-10-13T15:00:00.000Z',
     createdByEmail: 'partner@example.com',
+    createdByName: 'Atmiya Patel',
     updatedByEmail: 'partner@example.com',
     createdAt: '2026-10-13T14:00:00.000Z',
     updatedAt: '2026-10-13T14:00:00.000Z',

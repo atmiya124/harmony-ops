@@ -100,8 +100,15 @@ export interface DocumentModel {
   // payment section is switched off and they're short enough — in its place
   // beside the totals.
   termsPlacement: 'section' | 'summary';
-  // Quotes. `signed` is filled in once the client has accepted online.
-  acceptance: { authorizedBy: string; customerStatement: string; signed: SignedAcceptance | null } | null;
+  // Quotes. `signed` is filled in once the client has accepted online, and
+  // with it `authorizedSigned`: the partner who created the quote, signing
+  // as of the day it was sent.
+  acceptance: {
+    authorizedBy: string;
+    customerStatement: string;
+    signed: SignedAcceptance | null;
+    authorizedSigned: { name: string; date: string } | null;
+  } | null;
   paymentStatus: { caption: string | null; steps: StatusStep[]; badge: string; badgeTone: 'due' | 'paid' | 'void'; badgeNote: string } | null; // invoices
   continuation: { left: string; right: string }; // compact header on page 2+
   footerNote: string;
@@ -265,6 +272,11 @@ export function quoteDocument(q: QuoteDto, config: DocumentConfig, accepted: Doc
       : [];
   const cardRow: PaymentRow[] = config.payment.cards.length ? [{ label: 'Card payment', value: `We accept: ${config.payment.cards.join(', ')}` }] : [];
   const etransfer: PaymentRow[] = config.payment.etransferEmail ? [{ label: 'E-Transfer', value: config.payment.etransferEmail }] : [];
+  const signed = signedAcceptance(q, accepted);
+  const creator = q.createdByName.trim();
+  // A quote accepted through its link was sent; the quote date covers one
+  // that was never marked sent.
+  const authorizedSigned = signed && creator ? { name: creator, date: q.sentAt ? documentDate(torontoDate(q.sentAt)) : documentDate(q.quoteDate) } : null;
   return {
     kind: 'quote',
     title: 'Quote',
@@ -291,7 +303,7 @@ export function quoteDocument(q: QuoteDto, config: DocumentConfig, accepted: Doc
     terms: splitTerms(q.terms),
     termsAside: 'Please read before signing',
     termsPlacement: termsPlacement(q.showPaymentDetails, splitTerms(q.terms)),
-    acceptance: { authorizedBy: `Authorized by · ${config.companyName}`, customerStatement: 'I accept this quote, its pricing and the terms above.', signed: signedAcceptance(q, accepted) },
+    acceptance: { authorizedBy: `Authorized by · ${config.companyName}`, customerStatement: 'I accept this quote, its pricing and the terms above.', signed, authorizedSigned },
     paymentStatus: null,
     continuation: { left: `Quote · ${q.quoteNumber}`, right: `${q.customerName} · continued` },
     footerNote: config.quoteFooterNote,

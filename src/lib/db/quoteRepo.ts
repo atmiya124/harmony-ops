@@ -87,6 +87,7 @@ export interface QuoteDto extends QuoteSummaryDto {
   sentAt: string | null;
   acceptedAt: string | null;
   createdByEmail: string;
+  createdByName: string; // signs the company side of the accepted quote PDF
   updatedByEmail: string;
   items: QuoteItemDto[];
   invoices: { id: string; invoiceNumber: string; status: InvoiceStatus }[];
@@ -248,15 +249,19 @@ const staleMessage = 'Someone else changed this quote. Review their changes and 
 // Reads
 // ---------------------------------------------------------------------------
 
+// A creator's full Google name (initials and the PDF signature need a last
+// name, and PARTNER_NAMES holds first names only), else their display name.
+async function creatorNames(emails: string[], reader: Tx | typeof db = db): Promise<(email: string) => string> {
+  const unique = [...new Set(emails)];
+  const users = unique.length ? await reader.select({ email: authUser.email, name: authUser.name }).from(authUser).where(inArray(authUser.email, unique)) : [];
+  const googleName = new Map(users.map((u) => [normalizeEmail(u.email), u.name?.trim()]));
+  return (email: string) => googleName.get(normalizeEmail(email)) || partnerDisplayName(email);
+}
+
 // Newest first: numbers are handed out in order, so the highest is newest.
 export async function listQuotes(): Promise<QuoteListItemDto[]> {
   const rows = await db.select().from(quotes).where(isNull(quotes.deletedAt)).orderBy(desc(quotes.quoteNumber));
-  // The creator's full Google name (initials need a last name, and
-  // PARTNER_NAMES holds first names only), else their display name.
-  const emails = [...new Set(rows.map((r) => r.createdByEmail))];
-  const users = emails.length ? await db.select({ email: authUser.email, name: authUser.name }).from(authUser).where(inArray(authUser.email, emails)) : [];
-  const googleName = new Map(users.map((u) => [normalizeEmail(u.email), u.name?.trim()]));
-  const creatorName = (email: string) => googleName.get(normalizeEmail(email)) || partnerDisplayName(email);
+  const creatorName = await creatorNames(rows.map((r) => r.createdByEmail));
   const initials = distinctInitials(rows.map((r) => creatorName(r.createdByEmail)));
   return rows.map((r) => {
     const name = creatorName(r.createdByEmail);
@@ -289,7 +294,7 @@ export async function listCustomers(): Promise<CustomerDto[]> {
 export async function getQuote(id: string, reader: Tx | typeof db = db): Promise<QuoteDto | null> {
   const [row] = await reader.select().from(quotes).where(and(eq(quotes.id, id), isNull(quotes.deletedAt)));
   if (!row) return null;
-  const [items, booking, linkedInvoices, sends] = await Promise.all([
+  const [items, booking, linkedInvoices, sends, creatorName] = await Promise.all([
     reader.select().from(quoteItems).where(eq(quoteItems.quoteId, id)).orderBy(asc(quoteItems.sortOrder)),
     row.eventId !== null
       ? reader.select({ id: bookings.id, title: bookings.eventTitle, eventDate: bookings.eventDate }).from(bookings).where(eq(bookings.id, row.eventId))
@@ -304,6 +309,7 @@ export async function getQuote(id: string, reader: Tx | typeof db = db): Promise
       .from(quoteEmailSends)
       .where(eq(quoteEmailSends.quoteId, id))
       .orderBy(desc(quoteEmailSends.sentAt), desc(quoteEmailSends.id)),
+    creatorNames([row.createdByEmail], reader),
   ]);
   const event = booking[0] ? { id: booking[0].id, title: booking[0].title || 'Untitled event', eventDate: booking[0].eventDate } : null;
   return {
@@ -337,6 +343,7 @@ export async function getQuote(id: string, reader: Tx | typeof db = db): Promise
     sentAt: row.sentAt,
     acceptedAt: row.acceptedAt,
     createdByEmail: row.createdByEmail,
+    createdByName: creatorName(row.createdByEmail),
     updatedByEmail: row.updatedByEmail,
     items: items.map(toItemDto),
     invoices: linkedInvoices,
