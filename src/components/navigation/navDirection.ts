@@ -13,7 +13,9 @@ export function screenLevel(pathname: string): number {
   // One partner: deeper than Finances' card pages (it opens from "Owed to
   // partners"), shallower than the expenses it lists.
   if (/^\/finances\/partners\/[^/]+\/?$/.test(pathname)) return 2.5;
-  if (/^\/finances\/(events|owed)\/?$/.test(pathname)) return 2; // a Finances card's details
+  // One crew person: under the Crew list, above the labour they worked.
+  if (/^\/finances\/crew\/[^/]+\/?$/.test(pathname)) return 2.5;
+  if (/^\/finances\/(events|owed|crew)\/?$/.test(pathname)) return 2; // a Finances card's details
   return 1; // Bookings, Today, Finances, Quotes, Invoices, the calculators
 }
 
@@ -27,7 +29,8 @@ export function parentOf(pathname: string): string {
   if (expenseEdit) return expenseEdit[1];
   if (/^\/expenses\/[^/]+\/?$/.test(pathname)) return '/finances';
   if (/^\/finances\/partners\/[^/]+\/?$/.test(pathname)) return '/finances';
-  if (/^\/finances\/(events|owed)\/?$/.test(pathname)) return '/finances';
+  if (/^\/finances\/crew\/[^/]+\/?$/.test(pathname)) return '/finances/crew';
+  if (/^\/finances\/(events|owed|crew)\/?$/.test(pathname)) return '/finances';
   const quoteEdit = pathname.match(/^(\/quotes\/[^/]+)\/edit\/?$/);
   if (quoteEdit) return quoteEdit[1];
   if (/^\/quotes\/[^/]+\/?$/.test(pathname)) return '/quotes';

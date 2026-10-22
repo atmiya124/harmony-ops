@@ -10,6 +10,7 @@ import {
   REIMBURSEMENT_METHODS,
 } from '../finance/types';
 import { defaultFundingSource, defaultReimbursable, isValidReimbursable } from '../finance/reimbursement';
+import { MAX_CREW_ROLE, MAX_LABOUR_LINES, MAX_LABOUR_MINUTES, MAX_WORKER_NAME } from '../finance/labour';
 
 // Server-side validation for financial writes. The database repeats the
 // critical rules as CHECK constraints; these schemas turn bad input into a
@@ -112,6 +113,85 @@ export function reimbursementInputSchema(today: string) {
   });
 }
 export type ReimbursementInput = z.output<ReturnType<typeof reimbursementInputSchema>>;
+
+// ---------------------------------------------------------------------------
+// Hourly crew labour (see src/lib/finance/labour.ts)
+// ---------------------------------------------------------------------------
+
+// One person's hours on an event. `id` is client-generated and stays the
+// same across edits (payments point at it). Name, role and rate are the
+// values used for this event — a snapshot, even when picked from a profile.
+const labourLineInput = z.object({
+  id: z.uuid('Invalid line id'),
+  crewMemberId: z.uuid().nullish().transform((v) => v ?? null),
+  workerName: z.string('Enter a name').trim().min(1, 'Enter a name').max(MAX_WORKER_NAME, `Keep names under ${MAX_WORKER_NAME} characters`),
+  role: optionalText(MAX_CREW_ROLE),
+  minutes: z.number('Enter hours').int().min(1, 'Hours must be more than 0').max(MAX_LABOUR_MINUTES, "Hours can't exceed 24 in one entry"),
+  rateCents: positiveCents,
+});
+
+// Saving an event's labour replaces its set of lines. `expectedUpdatedAt` is
+// null when the event had no labour yet, otherwise the version the editor
+// loaded (409 if someone else saved in between).
+export const labourSaveSchema = z
+  .object({
+    expectedUpdatedAt: z.string().min(1).nullable(),
+    lines: z.array(labourLineInput).min(1, 'Add at least one person').max(MAX_LABOUR_LINES, `At most ${MAX_LABOUR_LINES} people per event`),
+  })
+  .superRefine((v, ctx) => {
+    if (new Set(v.lines.map((l) => l.id)).size !== v.lines.length) ctx.addIssue({ code: 'custom', path: ['lines'], message: 'Duplicate line' });
+  });
+export type LabourSaveInput = z.output<typeof labourSaveSchema>;
+
+// Paying one crew person, later and separately from entering hours. The
+// same "who paid / paid with / whose money" fields as an expense, so a
+// partner paying from their own pocket is owed it back like any expense.
+export function labourPaymentSchema(today: string) {
+  return z
+    .object({
+      id: z.uuid('Invalid payment id'),
+      amountCents: positiveCents,
+      paidOn: pastDate(today),
+      paidByEmail: z.string().trim().toLowerCase().pipe(z.email('Choose who paid')),
+      paymentMethod: z.enum(PAYMENT_METHODS, 'Choose a payment method'),
+      fundingSource: z.enum(FUNDING_SOURCES).optional(),
+      reimbursable: z.boolean().optional(),
+      reference: optionalText(100),
+      notes: optionalText(500),
+    })
+    .transform((v) => {
+      const fundingSource = v.fundingSource ?? defaultFundingSource(v.paymentMethod);
+      return { ...v, fundingSource, reimbursable: v.reimbursable ?? defaultReimbursable(fundingSource) };
+    })
+    .superRefine((v, ctx) => {
+      if (!isValidReimbursable(v.fundingSource, v.reimbursable)) {
+        ctx.addIssue({ code: 'custom', path: ['reimbursable'], message: 'Company-paid payments are never reimbursed' });
+      }
+    });
+}
+export type LabourPaymentInput = z.output<ReturnType<typeof labourPaymentSchema>>;
+
+// A crew / contractor profile. Only the name is required.
+const crewFields = {
+  name: z.string('Enter a name').trim().min(1, 'Enter a name').max(MAX_WORKER_NAME, `Keep names under ${MAX_WORKER_NAME} characters`),
+  phone: optionalText(40),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .nullish()
+    .transform((v) => (v ? v : null))
+    .pipe(z.email('Enter a valid email').nullable()),
+  role: optionalText(MAX_CREW_ROLE),
+  company: optionalText(120),
+  defaultRateCents: positiveCents.nullish().transform((v) => v ?? null),
+  notes: optionalText(2000),
+  active: z.boolean().default(true),
+};
+export const crewMemberCreateSchema = z.object({ id: z.uuid('Invalid id'), ...crewFields });
+export const crewMemberUpdateSchema = z.object({ ...crewFields, expectedUpdatedAt: z.string().min(1, 'Missing version') });
+export type CrewMemberCreate = z.output<typeof crewMemberCreateSchema>;
+export type CrewMemberUpdate = z.output<typeof crewMemberUpdateSchema>;
 
 export const voidInputSchema = z.object({
   reason: z.string('Give a reason').trim().min(3, 'Give a short reason').max(500, 'Keep it under 500 characters'),

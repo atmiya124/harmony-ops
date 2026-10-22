@@ -2,12 +2,17 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import ExpenseSheet from './ExpenseSheet';
+import LabourSheet from '@/components/labour/LabourSheet';
 
 // One Add/Edit Expense sheet for the whole app. Any screen can open it —
 // Events Home, a booking (event preselected), a row in a list — and every
 // expense list re-fetches when `version` changes after a save/delete/undo.
 
-type SheetRequest = { mode: 'new'; bookingId: number | null; key: number } | { mode: 'edit'; expenseId: string; key: number };
+// `labour` is an event's crew hours sheet (add labour, or edit what's there).
+type SheetRequest =
+  | { mode: 'new'; bookingId: number | null; key: number }
+  | { mode: 'edit'; expenseId: string; key: number }
+  | { mode: 'labour'; bookingId: number; key: number };
 
 interface ToastState {
   message: string;
@@ -19,6 +24,7 @@ interface ToastState {
 interface ExpenseEntryContext {
   openNewExpense: (options?: { bookingId?: number | null }) => void;
   openEditExpense: (expenseId: string) => void;
+  openLabour: (bookingId: number) => void;
   version: number;
   notifyChanged: () => void;
   showToast: (toast: Omit<ToastState, 'key'>) => void;
@@ -45,17 +51,21 @@ export default function ExpenseEntryProvider({ children }: { children: React.Rea
     setRequest({ mode: 'new', bookingId: options?.bookingId ?? null, key: ++counter.current });
   }, []);
   const openEditExpense = useCallback((expenseId: string) => setRequest({ mode: 'edit', expenseId, key: ++counter.current }), []);
+  const openLabour = useCallback((bookingId: number) => setRequest({ mode: 'labour', bookingId, key: ++counter.current }), []);
 
   return (
-    <Ctx.Provider value={{ openNewExpense, openEditExpense, version, notifyChanged, showToast }}>
+    <Ctx.Provider value={{ openNewExpense, openEditExpense, openLabour, version, notifyChanged, showToast }}>
       {children}
-      {request ? (
+      {request?.mode === 'labour' ? (
+        <LabourSheet key={request.key} bookingId={request.bookingId} onClose={() => setRequest(null)} onChanged={notifyChanged} showToast={showToast} />
+      ) : request ? (
         <ExpenseSheet
           key={request.key}
           request={request}
           onClose={() => setRequest(null)}
           onChanged={notifyChanged}
           showToast={showToast}
+          onSwitchToLabour={openLabour}
         />
       ) : null}
       {toast ? <Toast key={toast.key} toast={toast} onDone={closeToast} /> : null}

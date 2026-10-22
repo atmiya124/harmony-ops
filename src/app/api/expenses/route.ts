@@ -16,6 +16,7 @@ const listQuerySchema = z.object({
   paidBy: z.string().trim().toLowerCase().pipe(z.email()).optional(),
   category: z.enum(EXPENSE_CATEGORIES).optional(),
   includeDeleted: z.enum(['true', 'false']).optional(),
+  view: z.enum(['cost', 'outlay']).optional(),
   limit: z.coerce.number().int().min(1).max(2000).optional(),
 });
 
@@ -32,6 +33,7 @@ export const GET = withPartner(async (req) => {
       paidByEmail: q.paidBy,
       category: q.category,
       includeDeleted: q.includeDeleted === 'true',
+      view: q.view,
       limit: q.limit,
     });
     return NextResponse.json(expenses);

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Plus } from 'lucide-react';
+import { ChevronRight, Plus, Users } from 'lucide-react';
 import AreaTrend from '@/components/charts/AreaTrend';
 import ColumnTrend from '@/components/charts/ColumnTrend';
 import CategoryBars from './CategoryBars';
@@ -18,12 +18,15 @@ import { useCachedData } from '@/hooks/useCachedData';
 import { accumulate, bucketize, comparedTo, currentPeriod, inPeriod, isMonthRange, monthsSince, previousPeriod, rangeToParam, type DateRange } from '@/lib/dateRanges';
 import { formatCents, formatCentsWhole, percentChange } from '@/lib/money';
 import { todayLocal } from '@/lib/finance/dates';
+import { countsAsCost, countsAsOutlay } from '@/lib/finance/labour';
 import { EXPENSE_CATEGORIES } from '@/lib/finance/types';
 
 // The Finances tab: what the company spent over a period, where it went,
 // what each partner spent and is owed (each opens their own page). Every
 // card follows the range pills. Totals are money out (tax included); reimbursements are payments
 // against expenses, never extra spending, so they don't change any total.
+// Crew labour counts as cost when its hours are entered; paying the crew
+// later only shows in who-paid and owed-to-partner figures (see EXPENSE_KINDS).
 export default function FinancesDashboard() {
   const { version, openNewExpense } = useExpenseEntry();
   const [range, setRange] = useState<DateRange>(() => ({ month: todayLocal().slice(0, 7) }));
@@ -41,7 +44,8 @@ export default function FinancesDashboard() {
 
   const view = useMemo(() => {
     if (!expenses) return null;
-    const all = expenses.map((e) => ({ ...e, date: e.expenseDate, cents: e.amountCents }));
+    const rows = expenses.map((e) => ({ ...e, date: e.expenseDate, cents: e.amountCents }));
+    const all = rows.filter(countsAsCost);
     const period = currentPeriod(range, today);
     const previous = previousPeriod(range, today);
     const inRange = all.filter((e) => inPeriod(e.date, period));
@@ -49,7 +53,7 @@ export default function FinancesDashboard() {
     const previousTotal = previous ? all.filter((e) => inPeriod(e.date, previous)).reduce((s, e) => s + e.cents, 0) : null;
 
     const eventOnly = all.filter((e) => e.bookingId !== null);
-    const owed = all.filter((e) => e.reimbursement.outstandingCents > 0).map((e) => ({ date: e.date, cents: e.reimbursement.outstandingCents }));
+    const owed = rows.filter((e) => e.reimbursement.outstandingCents > 0).map((e) => ({ date: e.date, cents: e.reimbursement.outstandingCents }));
 
     const byCategory = EXPENSE_CATEGORIES.map((c) => ({
       category: c,
@@ -60,7 +64,7 @@ export default function FinancesDashboard() {
 
     // What each partner paid for in the period, split by whose money it was.
     const spentBy = new Map<string, { own: number; company: number }>();
-    for (const e of inRange) {
+    for (const e of rows.filter((r) => countsAsOutlay(r) && inPeriod(r.date, period))) {
       const s = spentBy.get(e.paidByEmail) ?? { own: 0, company: 0 };
       if (e.fundingSource === 'company') s.company += e.cents;
       else s.own += e.cents;
@@ -77,6 +81,8 @@ export default function FinancesDashboard() {
       owedTotal: owed.reduce((s, e) => s + e.cents, 0),
       owedTrend: accumulate(bucketize(owed, range, today)),
       byCategory,
+      // All crew labour still to be paid, whatever the period.
+      crewUnpaidCents: rows.reduce((s, e) => s + (e.labour?.remainingCents ?? 0), 0),
     };
   }, [expenses, range, today]);
 
@@ -136,6 +142,20 @@ export default function FinancesDashboard() {
               <AreaTrend data={view.owedTrend} color={SERIES.reimbursement} label="Outstanding reimbursements by expense date" height={56} />
             </ChartCard>
           </div>
+
+          {/* Crew: one line here; names, rates and history live on the Crew screen. */}
+          <Link href="/finances/crew" className="flex items-center gap-3 rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] px-4 py-3.5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
+              <Users size={17} className="text-white/80" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-white">Crew</span>
+            {view.crewUnpaidCents > 0 ? (
+              <span className="shrink-0 text-[15px] font-bold tabular-nums text-[var(--neon-orange)]">{formatCents(view.crewUnpaidCents)} unpaid</span>
+            ) : (
+              <span className="shrink-0 text-xs text-[var(--flat-text-faint)]">All paid</span>
+            )}
+            <ChevronRight size={16} className="shrink-0 text-white/30" />
+          </Link>
 
           {partnersBySpend.length > 0 ? (
             // Each partner opens their own page: history and paying them back.

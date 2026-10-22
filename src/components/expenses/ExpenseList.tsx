@@ -24,7 +24,9 @@ export default function ExpenseList({
   showEvent?: boolean;
 }) {
   const { version } = useExpenseEntry();
-  const query: ExpenseListFilter = { ...filter, limit };
+  // Spending lists: crew labour shows once, as its event's cost; payments to
+  // crew are inside it, not extra rows.
+  const query: ExpenseListFilter = { view: 'cost', ...filter, limit };
   const { data, error } = useCachedData(expensesKey(query), () => listExpenses(query), version);
   const expenses = data ?? null;
 

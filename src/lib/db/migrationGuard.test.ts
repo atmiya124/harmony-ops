@@ -101,3 +101,11 @@ test('the quote email history migration only creates its own table and index', (
     ['create_index', 'quote_email_sends'],
   ]);
 });
+
+test('the crew labour migration only adds to Harmony Ops tables', () => {
+  const checks = splitMigration(readFileSync(join(process.cwd(), 'drizzle/0013_crew_labour.sql'), 'utf8')).map(checkStatement);
+  for (const c of checks) assert.equal(c.ok, true, `${c.reason}: ${c.statement}`);
+  assert.deepEqual([...new Set(checks.map((c) => c.table))].sort(), ['crew_members', 'expense_labour_lines', 'expenses']);
+  // Only new columns on expenses (an own table), never a rebuild.
+  assert.ok(checks.filter((c) => c.table === 'expenses').every((c) => c.kind === 'add_column'), JSON.stringify(checks.map((c) => c.kind)));
+});

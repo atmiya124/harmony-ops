@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { eventFinancialsInputSchema, expenseInputSchema, expenseUpdateSchema, financeSettingsInputSchema, isCalendarDate, reimbursementInputSchema, voidInputSchema } from './finance';
+import { crewMemberCreateSchema, eventFinancialsInputSchema, expenseInputSchema, labourPaymentSchema, labourSaveSchema, expenseUpdateSchema, financeSettingsInputSchema, isCalendarDate, reimbursementInputSchema, voidInputSchema } from './finance';
 
 const TODAY = '2026-09-28';
 const schema = expenseInputSchema(TODAY);
@@ -127,4 +127,42 @@ test('voiding requires a reason', () => {
   assert.ok(voidInputSchema.safeParse({ reason: 'Entered twice' }).success);
   assert.equal(voidInputSchema.safeParse({ reason: '  ' }).success, false);
   assert.equal(voidInputSchema.safeParse({}).success, false);
+});
+
+
+test('labour save: lines carry ids and snapshots; no payment fields', () => {
+  const ok = labourSaveSchema.safeParse({
+    expectedUpdatedAt: null,
+    lines: [{ id: '3f0b8c1e-2d4a-4c6b-9e8f-1a2b3c4d5e6f', workerName: ' Mike ', minutes: 390, rateCents: 2500 }],
+  });
+  assert.ok(ok.success, JSON.stringify(ok.error?.issues));
+  assert.deepEqual(ok.data.lines[0], { id: '3f0b8c1e-2d4a-4c6b-9e8f-1a2b3c4d5e6f', crewMemberId: null, workerName: 'Mike', role: null, minutes: 390, rateCents: 2500 });
+  const line = ok.data.lines[0];
+  for (const bad of [{ ...line, workerName: ' ' }, { ...line, minutes: 0 }, { ...line, minutes: 1441 }, { ...line, rateCents: 0 }]) {
+    assert.equal(labourSaveSchema.safeParse({ expectedUpdatedAt: null, lines: [bad] }).success, false);
+  }
+  assert.equal(labourSaveSchema.safeParse({ expectedUpdatedAt: null, lines: [] }).success, false);
+  assert.equal(labourSaveSchema.safeParse({ expectedUpdatedAt: null, lines: [line, line] }).success, false); // duplicate id
+});
+
+test('labour payment: expense-style payer fields with defaults, optional reference', () => {
+  const p = labourPaymentSchema(TODAY).parse({
+    id: '3f0b8c1e-2d4a-4c6b-9e8f-1a2b3c4d5e6f',
+    amountCents: 20000,
+    paidOn: '2026-09-27',
+    paidByEmail: 'Ana@Example.com',
+    paymentMethod: 'etransfer',
+    reference: ' ET-99 ',
+  });
+  assert.deepEqual([p.paidByEmail, p.fundingSource, p.reimbursable, p.reference, p.notes], ['ana@example.com', 'personal', true, 'ET-99', null]);
+  assert.equal(labourPaymentSchema(TODAY).safeParse({ ...p, paymentMethod: 'company_card', fundingSource: 'company', reimbursable: true }).success, false);
+  assert.equal(labourPaymentSchema(TODAY).safeParse({ ...p, paidOn: '2026-10-05' }).success, false); // future
+});
+
+test('crew profile: only the name is required', () => {
+  const c = crewMemberCreateSchema.parse({ id: '3f0b8c1e-2d4a-4c6b-9e8f-1a2b3c4d5e6f', name: ' Mike ' });
+  assert.deepEqual(c, { id: c.id, name: 'Mike', phone: null, email: null, role: null, company: null, defaultRateCents: null, notes: null, active: true });
+  assert.equal(crewMemberCreateSchema.safeParse({ ...c, email: 'not-an-email' }).success, false);
+  assert.equal(crewMemberCreateSchema.parse({ ...c, email: ' Mike@X.com ' }).email, 'mike@x.com');
+  assert.equal(crewMemberCreateSchema.safeParse({ ...c, defaultRateCents: 0 }).success, false);
 });

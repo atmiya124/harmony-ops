@@ -14,6 +14,7 @@ import { DASHBOARD_EXPENSES_FILTER, expensesKey, FINANCE_PARTNERS_KEY, getPartne
 import { currentPeriod, inPeriod, isMonthRange, monthsSince, rangeFromParam, rangeLabel, rangeToParam, type DateRange } from '@/lib/dateRanges';
 import { formatCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
+import { countsAsCost } from '@/lib/finance/labour';
 
 interface EventGroup {
   key: string;
@@ -46,7 +47,8 @@ export default function EventExpenses({ initialRange }: { initialRange: string |
     const period = currentPeriod(range, today);
     const groups = new Map<string, EventGroup>();
     for (const e of expenses) {
-      if (e.bookingId === null || !inPeriod(e.expenseDate, period)) continue;
+      // Cost only: crew labour counts once, not again as its payments.
+      if (e.bookingId === null || !countsAsCost(e) || !inPeriod(e.expenseDate, period)) continue;
       const key = String(e.bookingId);
       const g = groups.get(key) ?? {
         key,

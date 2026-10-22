@@ -21,7 +21,8 @@ export default function PartnerDetail({ email }: { email: string }) {
   const { version } = useExpenseEntry();
   const { data: summary, error } = useCachedData(partnerKey(email), () => getPartnerSummary(email), version);
   // Their expenses (also what the list below shows), for the payment preview.
-  const filter = { paidBy: email, limit: 500 };
+  // The partner's own money: crew payments they made, never labour they only entered.
+  const filter = { paidBy: email, limit: 500, view: 'outlay' as const };
   const { data: expenses } = useCachedData(expensesKey(filter), () => listExpenses(filter), version);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState<string | null>(null);

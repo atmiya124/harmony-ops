@@ -23,7 +23,18 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   other: 'Other',
 };
 
-export const PAYMENT_METHODS = ['personal_card', 'company_card', 'cash', 'etransfer'] as const;
+// What an expense row records. `expense` is money spent (the normal case).
+// Hourly crew splits cost from cash: `labour` is an event's crew labour —
+// its amount is what the crew earned, a cost from the moment hours are
+// entered, paid or not — and each `labour_payment` is money paid to one
+// crew person against it. Cost totals count `expense` + `labour`; who-paid
+// and owed-to-partner totals count `expense` + `labour_payment`. So labour
+// is never counted twice, and a partner paying crew from their own pocket
+// is owed back exactly like any other expense.
+export const EXPENSE_KINDS = ['expense', 'labour', 'labour_payment'] as const;
+export type ExpenseKind = (typeof EXPENSE_KINDS)[number];
+
+export const PAYMENT_METHODS =['personal_card', 'company_card', 'cash', 'etransfer'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {

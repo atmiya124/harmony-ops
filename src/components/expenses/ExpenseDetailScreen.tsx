@@ -2,11 +2,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Pencil } from 'lucide-react';
 import ExpenseDetails from './ExpenseDetails';
+import LabourDetails from '@/components/labour/LabourDetails';
 import { useExpenseEntry } from './ExpenseEntryProvider';
 import Screen from '@/components/navigation/Screen';
+import { safeBackPath } from '@/components/navigation/navDirection';
 import ErrorState from '@/components/ui/ErrorState';
 import { useCachedData } from '@/hooks/useCachedData';
 import { expenseKey, FINANCE_PARTNERS_KEY, getExpense, getPartners } from '@/lib/financeApi';
@@ -30,8 +32,10 @@ export function useCloseExpenseEdit(): () => void {
 export default function ExpenseDetailScreen({ id, children }: { id: string; children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { version } = useExpenseEntry();
+  const { version, openLabour } = useExpenseEntry();
   const detailsPath = `/expenses/${id}`;
+  // Opened from another Finances screen (e.g. a crew profile): Back returns there.
+  const backTo = safeBackPath(useSearchParams().get('from')) ?? true;
 
   // Refetched after every save, delete or undo anywhere in the app.
   const expenseData = useCachedData(expenseKey(id), () => getExpense(id), version);
@@ -50,8 +54,19 @@ export default function ExpenseDetailScreen({ id, children }: { id: string; chil
     else router.replace(detailsPath);
   }, [router, detailsPath]);
 
+  // Crew labour edits hours on the event's labour sheet; a crew payment is
+  // never edited (it's removed and recorded again), so it has no pencil.
   const editAction =
-    expense && !expense.deletedAt ? (
+    expense && !expense.deletedAt && expense.kind === 'labour' && expense.bookingId !== null ? (
+      <button
+        type="button"
+        onClick={() => openLabour(expense.bookingId!)}
+        aria-label="Edit hours"
+        className="flex size-11 items-center justify-center rounded-full border border-[rgba(251,146,60,0.35)] bg-[rgba(251,146,60,0.14)] text-[var(--neon-orange)]"
+      >
+        <Pencil size={18} strokeWidth={2.25} />
+      </button>
+    ) : expense && !expense.deletedAt && expense.kind === 'expense' ? (
       <Link
         href={`${detailsPath}/edit`}
         aria-label="Edit expense"
@@ -62,8 +77,10 @@ export default function ExpenseDetailScreen({ id, children }: { id: string; chil
     ) : null;
 
   return (
-    <Screen title="Expense Details" compactTitle back action={editAction}>
-      {expense ? (
+    <Screen title={expense?.kind === 'labour' ? 'Crew Labour' : expense?.kind === 'labour_payment' ? 'Crew Payment' : 'Expense Details'} compactTitle back={backTo} action={editAction}>
+      {expense?.kind === 'labour' ? (
+        <LabourDetails expense={expense} />
+      ) : expense ? (
         <ExpenseDetails expense={expense} partners={partners} />
       ) : expenseData.error ? (
         <ErrorState message={expenseData.error} />

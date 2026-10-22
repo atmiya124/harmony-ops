@@ -3,7 +3,7 @@
 // until Phase 2, so the UI must always label it as an estimate.
 
 import { expenseCostCents, splitAgreedAmount } from './tax';
-import type { AmountStatus, HstTreatment } from './types';
+import type { AmountStatus, ExpenseKind, HstTreatment } from './types';
 
 interface AgreedAmount {
   agreedAmountCents: number;
@@ -13,6 +13,7 @@ interface AgreedAmount {
 }
 
 interface ExpenseForProfit {
+  kind?: ExpenseKind; // omitted = a plain expense
   amountCents: number;
   taxCents: number;
   deletedAt: string | null;
@@ -34,7 +35,9 @@ export interface EventFinancialSummary {
 }
 
 export function summarizeEvent(agreed: AgreedAmount | null, expenses: ExpenseForProfit[], hstRegistered: boolean): EventFinancialSummary {
-  const live = expenses.filter((e) => !e.deletedAt);
+  // Crew labour is a cost from the moment hours are entered; paying the crew
+  // later settles it and isn't a second cost.
+  const live = expenses.filter((e) => !e.deletedAt && e.kind !== 'labour_payment');
   const expensesPaidCents = live.reduce((sum, e) => sum + e.amountCents, 0);
   const costCents = live.reduce((sum, e) => sum + expenseCostCents(e.amountCents, e.taxCents, hstRegistered), 0);
 

@@ -46,6 +46,8 @@ interface Props {
   onClose: () => void;
   onChanged: () => void;
   showToast: (t: { message: string; actionLabel?: string; onAction?: () => Promise<void> | void }) => void;
+  // Crew paid by the hour is entered on the event's labour sheet instead.
+  onSwitchToLabour?: (bookingId: number) => void;
 }
 
 const PAYMENT_ICONS: Record<PaymentMethod, typeof CreditCard> = {
@@ -68,7 +70,7 @@ function initials(p: { email: string; name: string | null }): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
 }
 
-export default function ExpenseSheet({ request, onClose, onChanged, showToast }: Props) {
+export default function ExpenseSheet({ request, onClose, onChanged, showToast, onSwitchToLabour }: Props) {
   const titleId = useId();
   const isEdit = request.mode === 'edit';
   const today = todayLocal();
@@ -182,6 +184,8 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
     getExpense(request.expenseId)
       .then((e) => {
         if (e.deletedAt) throw new Error('This expense was deleted.');
+        if (e.kind === 'labour') throw new Error("Crew hours are edited from the event's labour.");
+        if (e.kind === 'labour_payment') throw new Error("A crew payment can't be edited. Remove it and record it again.");
         fillFrom(e);
       })
       .catch((err) => setFormError(err instanceof Error ? err.message : 'Could not load this expense'))
@@ -236,7 +240,10 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
   const parsedTax = taxTouched && taxText.trim() ? parseAmountToCents(taxText) : null;
   const taxCents = !receiptShowsHst ? 0 : parsedTax ? (parsedTax.ok ? parsedTax.cents : -1) : suggestedTax;
 
-  const duplicate = findLikelyDuplicate({ id: isEdit ? expenseId : undefined, amountCents, expenseDate }, recent);
+  const duplicate = findLikelyDuplicate(
+    { id: isEdit ? expenseId : undefined, amountCents, expenseDate },
+    recent.filter((e) => e.kind === 'expense'),
+  );
 
   const eventOptions = useMemo(() => {
     const dayNum = (iso: string) => (iso ? new Date(`${iso}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER);
@@ -493,6 +500,24 @@ export default function ExpenseSheet({ request, onClose, onChanged, showToast }:
                     );
                   })}
                 </div>
+                {category === 'crew' && !isEdit && onSwitchToLabour ? (
+                  <div className="mt-2 flex items-center justify-between rounded-2xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-xs text-[var(--flat-text-faint)]">How is the crew paid?</span>
+                    <div className="flex gap-1 rounded-full bg-white/[0.05] p-0.5">
+                      <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[#0a0a0a]">Total</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (bookingId === null) setFieldErrors((f) => ({ ...f, bookingId: 'Choose the event for hourly crew' }));
+                          else onSwitchToLabour(bookingId);
+                        }}
+                        className="rounded-full px-3 py-1 text-[11px] font-bold text-[var(--flat-text-dim)]"
+                      >
+                        <span className="text-[11px] font-bold">Hourly</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </Section>
 
               <Section label="Event" error={fieldErrors.bookingId}>

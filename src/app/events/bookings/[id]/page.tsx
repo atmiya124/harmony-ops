@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bell, Calendar, Check, ChevronRight, Clock, FileText, Mail, MapPin, Phone, Plus, Truck, type LucideIcon } from 'lucide-react';
+import { Bell, Calendar, Check, ChevronRight, Clock, FileText, Mail, MapPin, Phone, Plus, Truck, Users, type LucideIcon } from 'lucide-react';
 import { Booking, BookingStatus, STATUSES } from '@/lib/bookingTypes';
 import { bookingKey, deleteBooking, getBooking, updateBooking } from '@/lib/bookingsApi';
 import { peekCache } from '@/lib/clientCache';
@@ -63,7 +63,7 @@ function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const partnerEmails = useCachedData('partner-settings', getPartnerSettings).data?.partnerEmails ?? [];
-  const { openNewExpense } = useExpenseEntry();
+  const { openNewExpense, openLabour } = useExpenseEntry();
 
   useEffect(() => {
     getBooking(id)
@@ -187,14 +187,25 @@ function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
 
       <Panel title="Expenses">
         <ExpenseList filter={{ event: booking.id }} showEvent={false} emptyText="No expenses for this event yet" />
-        <button
-          type="button"
-          onClick={() => openNewExpense({ bookingId: booking.id })}
-          className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] py-3 text-white"
-        >
-          <Plus size={16} />
-          <span className="text-[15px] font-semibold">Add expense</span>
-        </button>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => openNewExpense({ bookingId: booking.id })}
+            className="flex items-center justify-center gap-2 rounded-full border border-white/[0.16] py-3 text-white"
+          >
+            <Plus size={16} />
+            <span className="text-[15px] font-semibold">Add expense</span>
+          </button>
+          {/* Outsourced crew paid by the hour: person · hours · rate. Opens the event's labour if there is some already. */}
+          <button
+            type="button"
+            onClick={() => openLabour(booking.id)}
+            className="flex items-center justify-center gap-2 rounded-full border border-white/[0.16] py-3 text-white"
+          >
+            <Users size={16} />
+            <span className="text-[15px] font-semibold">Add labour</span>
+          </button>
+        </div>
       </Panel>
 
       {booking.notes ? (

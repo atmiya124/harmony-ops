@@ -86,7 +86,7 @@ test('a partner page sits under Finances, above the expenses it lists', () => {
 });
 
 test("the Finances cards' detail pages sit under Finances", () => {
-  for (const page of ['/finances/events', '/finances/owed']) {
+  for (const page of ['/finances/events', '/finances/owed', '/finances/crew']) {
     assert.equal(screenLevel(page), 2, page);
     assert.equal(parentOf(page), '/finances', page);
     assert.equal(directionBetween('/finances', page), 'forward', page);
@@ -101,4 +101,13 @@ test('Back can be pointed only at in-app Finances paths', () => {
   for (const bad of [null, '', 'https://evil.example', '//evil.example', '/quotes', '/finances/../login', 'javascript:alert(1)']) {
     assert.equal(safeBackPath(bad), null, String(bad));
   }
+});
+
+test('a crew profile sits under Crew, above the labour it links to', () => {
+  const person = '/finances/crew/3f0b8c1e-2d4a-4c6b-9e8f-1a2b3c4d5e6f';
+  assert.equal(screenLevel(person), 2.5);
+  assert.equal(parentOf(person), '/finances/crew');
+  assert.equal(directionBetween('/finances/crew', person), 'forward');
+  assert.equal(directionBetween(person, '/expenses/abc'), 'forward');
+  assert.equal(safeBackPath(person), person);
 });

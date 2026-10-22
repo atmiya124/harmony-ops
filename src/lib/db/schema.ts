@@ -7,6 +7,7 @@ import {
   CURRENCY,
   DEFAULT_HST_RATE_BP,
   EXPENSE_CATEGORIES,
+  EXPENSE_KINDS,
   FUNDING_SOURCES,
   HST_TREATMENTS,
   MAX_AMOUNT_CENTS,
@@ -14,6 +15,7 @@ import {
   PAYMENT_METHODS,
   REIMBURSEMENT_METHODS,
 } from '../finance/types';
+import { MAX_CREW_ROLE, MAX_LABOUR_MINUTES, MAX_WORKER_NAME } from '../finance/labour';
 import {
   ADJUSTMENT_TYPES,
   DOCUMENT_SEQUENCES,
@@ -280,6 +282,15 @@ export const expenses = sqliteTable(
     reimbursable: integer('reimbursable', { mode: 'boolean' }).notNull(),
     receiptAttachmentId: text('receipt_attachment_id').references(() => attachments.id),
     notes: text('notes'),
+    // See EXPENSE_KINDS. A `labour` row is an event's crew labour: its amount
+    // is what the crew earned (the sum of its expense_labour_lines), and its
+    // payer columns only say who recorded it (company, never reimbursable).
+    // A `labour_payment` row is a real payment to the crew person on
+    // `labour_line_id`. Checked by the app: SQLite can't add a CHECK to an
+    // existing table without rebuilding it.
+    kind: text('kind', { enum: EXPENSE_KINDS }).notNull().default('expense'),
+    labourLineId: text('labour_line_id'),
+    reference: text('reference'), // e.g. an e-transfer or cheque number
     createdByUserId: text('created_by_user_id').notNull(),
     createdByEmail: text('created_by_email').notNull(),
     updatedByEmail: text('updated_by_email').notNull(),
@@ -303,6 +314,68 @@ export const expenses = sqliteTable(
     // Company money is never reimbursed to anyone.
     check('expenses_company_not_reimbursable', sql`${t.fundingSource} = 'personal' OR ${t.reimbursable} = 0`),
     check('expenses_date_format', sql`${t.expenseDate} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`),
+  ],
+);
+
+// The crew / contractor directory: outsourced people Harmony hires by the
+// hour, so their contact details and usual rate are on hand. Not payroll:
+// everything but the name is optional. A profile only supplies defaults —
+// each event's labour line keeps its own copy of the name, role and rate
+// used, so editing a profile never changes past labour.
+export const crewMembers = sqliteTable(
+  'crew_members',
+  {
+    id: text('id').primaryKey(), // client-generated UUID
+    name: text('name').notNull(),
+    phone: text('phone'),
+    email: text('email'),
+    role: text('role'), // e.g. LED Tech, Stagehand
+    company: text('company'),
+    defaultRateCents: integer('default_rate_cents'), // per hour
+    notes: text('notes'),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    createdByEmail: text('created_by_email').notNull(),
+    updatedByEmail: text('updated_by_email').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    index('crew_members_name_idx').on(t.name),
+    check('crew_members_name_length', sql`length(${t.name}) BETWEEN 1 AND ${sql.raw(String(MAX_WORKER_NAME))}`),
+    check('crew_members_rate_range', sql`${t.defaultRateCents} IS NULL OR (${t.defaultRateCents} > 0 AND ${t.defaultRateCents} <= ${sql.raw(String(MAX_AMOUNT_CENTS))})`),
+  ],
+);
+
+// One crew person's hours on an event's `labour` expense: a snapshot of the
+// name, role and rate actually used (crew_member_id links the profile when
+// there is one; null = a one-off person). The parent expense's amount is
+// always the sum of its lines' amounts, worked out on the server. Line ids
+// are stable across edits, because payments point at them.
+export const expenseLabourLines = sqliteTable(
+  'expense_labour_lines',
+  {
+    id: text('id').primaryKey(), // client-generated UUID
+    expenseId: text('expense_id')
+      .notNull()
+      .references(() => expenses.id),
+    crewMemberId: text('crew_member_id').references(() => crewMembers.id),
+    position: integer('position').notNull(),
+    workerName: text('worker_name').notNull(),
+    role: text('role'),
+    minutes: integer('minutes').notNull(),
+    rateCents: integer('rate_cents').notNull(), // per hour
+    amountCents: integer('amount_cents').notNull(), // earned: round(minutes × rate / 60)
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    index('expense_labour_lines_expense_id_idx').on(t.expenseId),
+    index('expense_labour_lines_crew_member_id_idx').on(t.crewMemberId),
+    check('expense_labour_lines_role_length', sql`${t.role} IS NULL OR length(${t.role}) <= ${sql.raw(String(MAX_CREW_ROLE))}`),
+    check('expense_labour_lines_minutes_range', sql`${t.minutes} > 0 AND ${t.minutes} <= ${sql.raw(String(MAX_LABOUR_MINUTES))}`),
+    check('expense_labour_lines_rate_range', sql`${t.rateCents} > 0 AND ${t.rateCents} <= ${sql.raw(String(MAX_AMOUNT_CENTS))}`),
+    check('expense_labour_lines_amount_range', sql`${t.amountCents} >= 0 AND ${t.amountCents} <= ${sql.raw(String(MAX_AMOUNT_CENTS))}`),
+    check('expense_labour_lines_name_length', sql`length(${t.workerName}) BETWEEN 1 AND ${sql.raw(String(MAX_WORKER_NAME))}`),
   ],
 );
 
@@ -869,6 +942,8 @@ export type EventFinancialsRow = typeof eventFinancials.$inferSelect;
 export type FinanceSettingsRow = typeof financeSettings.$inferSelect;
 export type FinanceAuditLogRow = typeof financeAuditLog.$inferSelect;
 export type ReimbursementRow = typeof reimbursements.$inferSelect;
+export type ExpenseLabourLineRow = typeof expenseLabourLines.$inferSelect;
+export type CrewMemberRow = typeof crewMembers.$inferSelect;
 export type QuoteRow = typeof quotes.$inferSelect;
 export type QuoteItemRow = typeof quoteItems.$inferSelect;
 export type InvoiceRow = typeof invoices.$inferSelect;

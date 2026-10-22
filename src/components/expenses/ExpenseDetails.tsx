@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, ChevronRight, FileText, NotebookText, Paperclip } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, FileText, NotebookText, Paperclip, Trash2 } from 'lucide-react';
 import { CATEGORY_META } from './categoryMeta';
 import { partnerLabel } from './partnerLabel';
+import { useExpenseEntry } from './ExpenseEntryProvider';
 import { colorAlpha } from '@/lib/colorAlpha';
-import { receiptUrl, type ExpenseDetailDto, type PartnerOption } from '@/lib/financeApi';
+import { deleteExpense, receiptUrl, restoreExpense, type ExpenseDetailDto, type PartnerOption } from '@/lib/financeApi';
 import { formatCents } from '@/lib/money';
 import { PAYMENT_METHOD_LABELS, REIMBURSEMENT_STATUS_LABELS, type ReimbursementStatus } from '@/lib/finance/types';
 
@@ -57,7 +59,7 @@ export default function ExpenseDetails({ expense, partners }: { expense: Expense
           <Icon size={28} style={{ color: meta.color }} />
         </span>
         <div className="min-w-0">
-          <h2 className="truncate text-[22px] font-semibold leading-tight text-white">{meta.label}</h2>
+          <h2 className="truncate text-[22px] font-semibold leading-tight text-white">{expense.kind === 'labour_payment' ? 'Crew payment' : meta.label}</h2>
           <p className="mt-1 text-[34px] font-bold leading-none tracking-tight tabular-nums text-white">{formatCents(expense.amountCents)}</p>
         </div>
       </section>
@@ -98,8 +100,17 @@ export default function ExpenseDetails({ expense, partners }: { expense: Expense
               'General business'
             )}
           </Row>
+          {expense.labourPayment ? (
+            <Row label="Paid to">
+              <Link href={`/expenses/${expense.labourPayment.labourExpenseId}`} className="inline-flex max-w-full items-center gap-1 text-white">
+                <span className="truncate">{expense.labourPayment.workerName}</span>
+                <ChevronRight size={16} className="shrink-0 text-white/35" />
+              </Link>
+            </Row>
+          ) : null}
           <Row label="Paid by">{paidBy}</Row>
           <Row label="Paid with">{PAYMENT_METHOD_LABELS[expense.paymentMethod]}</Row>
+          {expense.reference ? <Row label="Reference">{expense.reference}</Row> : null}
           {/* The amount already includes HST, so the breakdown only earns its
               place when there's HST to break out. */}
           {expense.taxCents > 0 ? (
@@ -127,6 +138,48 @@ export default function ExpenseDetails({ expense, partners }: { expense: Expense
           </div>
         </Card>
       ) : null}
+
+      {expense.kind === 'labour_payment' && !expense.deletedAt ? <RemovePayment expense={expense} /> : null}
+    </div>
+  );
+}
+
+// A crew payment entered by mistake is removed (kept in history, with
+// Undo), and what it covered becomes owed again.
+function RemovePayment({ expense }: { expense: ExpenseDetailDto }) {
+  const { notifyChanged, showToast } = useExpenseEntry();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="pt-1 text-center">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await deleteExpense(expense.id);
+            notifyChanged();
+            showToast({
+              message: 'Payment removed',
+              actionLabel: 'Undo',
+              onAction: async () => {
+                await restoreExpense(expense.id);
+                notifyChanged();
+              },
+            });
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not remove the payment');
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className="inline-flex items-center gap-1.5 py-2 text-xs font-bold text-[var(--neon-pink)] disabled:opacity-40"
+      >
+        <Trash2 size={14} /> <span className="text-xs font-bold">Remove payment</span>
+      </button>
+      {error ? <p className="text-xs text-[var(--neon-pink)]">{error}</p> : null}
     </div>
   );
 }

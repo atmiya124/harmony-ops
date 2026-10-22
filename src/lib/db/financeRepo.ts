@@ -6,14 +6,26 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, desc, eq, gte, inArray, isNull, lte, ne, or, type SQL } from 'drizzle-orm';
 import { db } from './client';
-import { attachments, authUser, bookings, expenses, financeAuditLog, reimbursements, type ExpenseRow, type ReimbursementRow } from './schema';
+import {
+  attachments,
+  authUser,
+  bookings,
+  expenseLabourLines,
+  expenses,
+  financeAuditLog,
+  reimbursements,
+  type ExpenseLabourLineRow,
+  type ExpenseRow,
+  type ReimbursementRow,
+} from './schema';
 import { getPartnerEmails, normalizeEmail, partnerDisplayName } from '../auth/allowlist';
 import { checkExpenseChangeAgainstPayments, checkNewReimbursement, reimbursementState, type ReimbursementState } from '../finance/reimbursement';
-import type { AuditAction, AuditEntityType, ExpenseCategory } from '../finance/types';
+import type { AuditAction, AuditEntityType, ExpenseCategory, ExpenseKind } from '../finance/types';
 import type { ExpenseInput, ExpenseUpdate, ReimbursementInput } from '../schemas/finance';
 import { activeStorage, storageFor, type StorageProvider, type StoredFile } from '../storage/receipts';
 import type { ReceiptFileType } from '../storage/fileType';
 import { formatCents } from '../money';
+import { labourPayState, totalPayState, type LabourPayState } from '../finance/labour';
 
 export interface Actor {
   id: string;
@@ -45,7 +57,7 @@ export function nextTimestamp(previous: string): string {
   return now > previous ? now : new Date(new Date(previous).getTime() + 1).toISOString();
 }
 
-async function audit(
+export async function audit(
   tx: Tx,
   entry: { entityType: AuditEntityType; entityId: string; action: AuditAction; actor: Actor; before: unknown; after: unknown; at: string },
 ) {
@@ -87,6 +99,7 @@ export async function listPartners(reader: Tx | typeof db = db): Promise<Partner
 
 export interface ExpenseDto {
   id: string;
+  kind: ExpenseKind;
   bookingId: number | null;
   booking: { id: number; title: string; eventDate: string } | null;
   bookingDeleted: boolean; // linked to a booking that no longer exists
@@ -103,6 +116,11 @@ export interface ExpenseDto {
   // `filename` is the name it was uploaded with (photos are re-encoded and
   // uploaded as receipt.jpg); `uploadedAt` is when the file was stored.
   receipt: { id: string; contentType: string; sizeBytes: number; filename: string | null; uploadedAt: string } | null;
+  // On `labour` rows: the event's crew labour at a glance (amount = earned).
+  labour: ({ people: number; minutes: number } & LabourPayState) | null;
+  // On `labour_payment` rows: which person (line) of which labour it paid.
+  labourPayment: { labourExpenseId: string; lineId: string; workerName: string; crewMemberId: string | null } | null;
+  reference: string | null;
   notes: string | null;
   createdByEmail: string;
   updatedByEmail: string;
@@ -155,14 +173,17 @@ function toReimbursementDto(r: ReimbursementRow): ReimbursementDto {
   };
 }
 
-// Loads everything the DTOs need for a set of expense rows in 3 queries.
+// Loads everything the DTOs need for a set of expense rows in a handful of
+// queries (labour figures only when the rows include labour or payments).
 async function hydrate(rows: ExpenseRow[], reader: Tx | typeof db = db): Promise<ExpenseDto[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const bookingIds = [...new Set(rows.map((r) => r.bookingId).filter((id): id is number => id !== null))];
   const attachmentIds = [...new Set(rows.map((r) => r.receiptAttachmentId).filter((id): id is string => id !== null))];
+  const labourIds = rows.filter((r) => r.kind === 'labour').map((r) => r.id);
+  const paidLineIds = [...new Set(rows.map((r) => (r.kind === 'labour_payment' ? r.labourLineId : null)).filter((id): id is string => id !== null))];
 
-  const [payments, bookingRows, attachmentRows] = await Promise.all([
+  const [payments, bookingRows, attachmentRows, lineRows] = await Promise.all([
     reader.select().from(reimbursements).where(inArray(reimbursements.expenseId, ids)),
     bookingIds.length
       ? reader.select({ id: bookings.id, title: bookings.eventTitle, eventDate: bookings.eventDate }).from(bookings).where(inArray(bookings.id, bookingIds))
@@ -179,17 +200,42 @@ async function hydrate(rows: ExpenseRow[], reader: Tx | typeof db = db): Promise
           .from(attachments)
           .where(and(inArray(attachments.id, attachmentIds), isNull(attachments.deletedAt)))
       : Promise.resolve([]),
+    labourIds.length || paidLineIds.length
+      ? reader
+          .select()
+          .from(expenseLabourLines)
+          .where(
+            or(
+              labourIds.length ? inArray(expenseLabourLines.expenseId, labourIds) : undefined,
+              paidLineIds.length ? inArray(expenseLabourLines.id, paidLineIds) : undefined,
+            ),
+          )
+      : Promise.resolve([]),
   ]);
+  // What each labour row's lines have been paid so far.
+  const labourIdSet = new Set(labourIds);
+  const paidByLine = await livePaidByLine(reader, lineRows.filter((l) => labourIdSet.has(l.expenseId)).map((l) => l.id));
 
   const paymentsByExpense = new Map<string, ReimbursementRow[]>();
   for (const p of payments) paymentsByExpense.set(p.expenseId, [...(paymentsByExpense.get(p.expenseId) ?? []), p]);
+  const linesByLabour = new Map<string, ExpenseLabourLineRow[]>();
+  for (const l of lineRows) linesByLabour.set(l.expenseId, [...(linesByLabour.get(l.expenseId) ?? []), l]);
+  const lineById = new Map(lineRows.map((l) => [l.id, l]));
   const bookingById = new Map(bookingRows.map((b) => [b.id, b]));
   const attachmentById = new Map(attachmentRows.map((a) => [a.id, a]));
 
   return rows.map((r) => {
     const booking = r.bookingId !== null ? bookingById.get(r.bookingId) : undefined;
+    let labour: ExpenseDto['labour'] = null;
+    if (r.kind === 'labour') {
+      const lines = linesByLabour.get(r.id) ?? [];
+      const state = totalPayState(lines.map((l) => labourPayState(l.amountCents, [{ amountCents: paidByLine.get(l.id) ?? 0 }])));
+      labour = { people: lines.length, minutes: lines.reduce((s, l) => s + l.minutes, 0), ...state };
+    }
+    const line = r.kind === 'labour_payment' && r.labourLineId ? lineById.get(r.labourLineId) : undefined;
     return {
       id: r.id,
+      kind: r.kind,
       bookingId: r.bookingId,
       booking: booking ? { id: booking.id, title: booking.title || 'Untitled event', eventDate: booking.eventDate } : null,
       bookingDeleted: r.bookingId !== null && !booking,
@@ -204,6 +250,9 @@ async function hydrate(rows: ExpenseRow[], reader: Tx | typeof db = db): Promise
       reimbursable: r.reimbursable,
       reimbursement: reimbursementState(r, paymentsByExpense.get(r.id) ?? []),
       receipt: r.receiptAttachmentId ? (attachmentById.get(r.receiptAttachmentId) ?? null) : null,
+      labour,
+      labourPayment: line ? { labourExpenseId: line.expenseId, lineId: line.id, workerName: line.workerName, crewMemberId: line.crewMemberId } : null,
+      reference: r.reference,
       notes: r.notes,
       createdByEmail: r.createdByEmail,
       updatedByEmail: r.updatedByEmail,
@@ -215,6 +264,18 @@ async function hydrate(rows: ExpenseRow[], reader: Tx | typeof db = db): Promise
   });
 }
 
+// Live (not removed) payments per labour line, in cents.
+export async function livePaidByLine(reader: Tx | typeof db, lineIds: string[]): Promise<Map<string, number>> {
+  const paid = new Map<string, number>();
+  if (lineIds.length === 0) return paid;
+  const rows = await reader
+    .select({ lineId: expenses.labourLineId, amountCents: expenses.amountCents })
+    .from(expenses)
+    .where(and(eq(expenses.kind, 'labour_payment'), isNull(expenses.deletedAt), inArray(expenses.labourLineId, lineIds)));
+  for (const r of rows) if (r.lineId) paid.set(r.lineId, (paid.get(r.lineId) ?? 0) + r.amountCents);
+  return paid;
+}
+
 // ---------------------------------------------------------------------------
 // Context checks shared by create and update
 // ---------------------------------------------------------------------------
@@ -223,7 +284,7 @@ async function hydrate(rows: ExpenseRow[], reader: Tx | typeof db = db): Promise
 // accepted as-is, so an expense can still be corrected after its partner
 // leaves PARTNER_EMAILS or Event-booking-app deletes its booking. Only a
 // newly chosen partner or event has to be valid today.
-async function assertExpenseContext(
+export async function assertExpenseContext(
   reader: Tx,
   input: { bookingId: number | null; paidByEmail: string; receiptAttachmentId: string | null },
   expenseId: string,
@@ -264,6 +325,9 @@ export interface ExpenseFilter {
   category?: ExpenseCategory;
   includeDeleted?: boolean;
   limit?: number;
+  // 'cost' = spending lists (labour, not crew payments); 'outlay' = who paid
+  // what (crew payments, not labour). Omitted = every row.
+  view?: 'cost' | 'outlay';
 }
 
 export async function listExpenses(filter: ExpenseFilter = {}): Promise<ExpenseDto[]> {
@@ -275,6 +339,8 @@ export async function listExpenses(filter: ExpenseFilter = {}): Promise<ExpenseD
   else if (filter.bookingId !== undefined) where.push(eq(expenses.bookingId, filter.bookingId));
   if (filter.paidByEmail) where.push(eq(expenses.paidByEmail, normalizeEmail(filter.paidByEmail)));
   if (filter.category) where.push(eq(expenses.category, filter.category));
+  if (filter.view === 'cost') where.push(ne(expenses.kind, 'labour_payment'));
+  if (filter.view === 'outlay') where.push(ne(expenses.kind, 'labour'));
 
   const rows = await db
     .select()
@@ -361,6 +427,10 @@ export async function updateExpense(id: string, input: ExpenseUpdate, actor: Act
     const [before] = await tx.select().from(expenses).where(eq(expenses.id, id));
     if (!before) throw new FinanceError(404, 'Expense not found');
     if (before.deletedAt) throw new FinanceError(409, 'This expense was deleted. Restore it before editing.');
+    // Labour is edited as hours on its own screen; a payment is removed and
+    // recorded again rather than rewritten, so its history stays true.
+    if (before.kind === 'labour') throw new FinanceError(422, "Edit crew hours from the event's labour screen");
+    if (before.kind === 'labour_payment') throw new FinanceError(422, "A crew payment can't be edited. Remove it and record it again.");
     if (before.updatedAt !== input.expectedUpdatedAt) {
       throw new FinanceError(409, 'Someone else changed this expense. Review their changes and try again.', undefined, await getExpenseDetail(id, tx));
     }
@@ -406,6 +476,11 @@ export async function deleteExpense(id: string, actor: Actor): Promise<ExpenseDe
     if (payments.some((p) => !p.voidedAt)) {
       throw new FinanceError(409, 'This expense has reimbursement payments. Void them before deleting it.');
     }
+    if (before.kind === 'labour') {
+      const lines = await tx.select({ id: expenseLabourLines.id }).from(expenseLabourLines).where(eq(expenseLabourLines.expenseId, id));
+      const paid = await livePaidByLine(tx, lines.map((l) => l.id));
+      if (paid.size > 0) throw new FinanceError(409, 'Crew have been paid for this labour. Remove their payments before deleting it.');
+    }
     const at = nextTimestamp(before.updatedAt);
     const [after] = await tx
       .update(expenses)
@@ -417,11 +492,34 @@ export async function deleteExpense(id: string, actor: Actor): Promise<ExpenseDe
   });
 }
 
+// Undoing a removal mustn't break the labour rules: an event has one live
+// labour record, and a restored payment can't take someone past what they
+// earned (hours may have changed, or they were paid again, meanwhile).
+async function assertLabourRestorable(tx: Tx, row: ExpenseRow) {
+  if (row.kind === 'labour' && row.bookingId !== null) {
+    const [other] = await tx
+      .select({ id: expenses.id })
+      .from(expenses)
+      .where(and(eq(expenses.kind, 'labour'), eq(expenses.bookingId, row.bookingId), isNull(expenses.deletedAt)));
+    if (other) throw new FinanceError(409, 'This event already has crew labour recorded');
+  }
+  if (row.kind === 'labour_payment' && row.labourLineId) {
+    const [line] = await tx.select().from(expenseLabourLines).where(eq(expenseLabourLines.id, row.labourLineId));
+    const [labour] = line ? await tx.select().from(expenses).where(eq(expenses.id, line.expenseId)) : [];
+    if (!line || !labour || labour.deletedAt) throw new FinanceError(409, 'The crew hours this payment was for no longer exist');
+    const state = labourPayState(line.amountCents, [{ amountCents: (await livePaidByLine(tx, [line.id])).get(line.id) ?? 0 }]);
+    if (row.amountCents > state.remainingCents) {
+      throw new FinanceError(409, `Only ${formatCents(state.remainingCents)} is still owed to ${line.workerName}, so this payment can't be restored`);
+    }
+  }
+}
+
 export async function restoreExpense(id: string, actor: Actor): Promise<ExpenseDetailDto> {
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(expenses).where(eq(expenses.id, id));
     if (!before) throw new FinanceError(404, 'Expense not found');
     if (!before.deletedAt) return (await getExpenseDetail(id, tx))!;
+    await assertLabourRestorable(tx, before);
     const at = nextTimestamp(before.updatedAt);
     const [after] = await tx
       .update(expenses)
@@ -536,7 +634,12 @@ export async function getPartnerSummary(email: string, reader: Tx | typeof db = 
   const partnerEmail = normalizeEmail(email);
   const partner = (await listPartners(reader)).find((p) => p.email === partnerEmail);
   if (!partner) return null;
-  const rows = await reader.select().from(expenses).where(and(eq(expenses.paidByEmail, partnerEmail), isNull(expenses.deletedAt)));
+  // A labour row's payer only says who recorded it; the partner's money is
+  // in their crew payments.
+  const rows = await reader
+    .select()
+    .from(expenses)
+    .where(and(eq(expenses.paidByEmail, partnerEmail), isNull(expenses.deletedAt), ne(expenses.kind, 'labour')));
   const list = await hydrate(rows, reader);
   const byId = new Map(list.map((e) => [e.id, e]));
   const paymentRows = list.length

@@ -1,11 +1,13 @@
 // Browser-side calls to the finance API. Errors carry the server's message
 // and per-field messages so forms can show them next to the right input.
 import type { AttachmentDto, ExpenseDetailDto, ExpenseDto, PartnerInfo, PartnerPaymentDto, PartnerSummaryDto } from './db/financeRepo';
+import type { CrewMemberDetailDto, CrewMemberDto, CrewWorkDto, EventLabourDto, LabourLineDto, LabourPaymentDto } from './db/labourRepo';
 import type { ExpenseCategory, FundingSource, PaymentMethod, ReimbursementMethod } from './finance/types';
 import { invalidateCache, loadCached, peekCache } from './clientCache';
 import { ApiError, json, request } from './apiClient';
 
 export type { AttachmentDto, ExpenseDetailDto, ExpenseDto, PartnerPaymentDto, PartnerSummaryDto };
+export type { CrewMemberDetailDto, CrewMemberDto, CrewWorkDto, EventLabourDto, LabourLineDto, LabourPaymentDto };
 export { ApiError };
 
 export interface PartnerOption extends PartnerInfo {
@@ -19,6 +21,11 @@ export const FINANCE_PARTNERS_KEY = 'finance-partners';
 export const expensesKey = (filter: ExpenseListFilter = {}) => `expenses:${JSON.stringify(filter)}`;
 // Under the same prefix, so it's cleared along with the lists.
 export const expenseKey = (id: string) => `expenses:detail:${id}`;
+// Labour and crew figures move with every expense change (hours, payments,
+// removals), so they live under the same prefix and clear with the lists.
+export const CREW_KEY = 'expenses:crew';
+export const crewMemberKey = (id: string) => `expenses:crew:${id}`;
+export const labourKey = (expenseId: string) => `expenses:labour:${expenseId}`;
 
 function changed<T>(result: Promise<T>): Promise<T> {
   return result.then((value) => {
@@ -37,6 +44,7 @@ export interface ExpenseListFilter {
   event?: number | 'general';
   paidBy?: string;
   limit?: number;
+  view?: 'cost' | 'outlay'; // see ExpenseFilter on the server
 }
 
 export function listExpenses(filter: ExpenseListFilter = {}): Promise<ExpenseDto[]> {
@@ -126,4 +134,73 @@ export function recordPartnerPayment(email: string, id: string, values: Reimburs
 
 export function voidReimbursement(expenseId: string, reimbursementId: string, reason: string): Promise<ExpenseDetailDto> {
   return changed(request(`/api/expenses/${expenseId}/reimbursements/${reimbursementId}/void`, json('POST', { reason })));
+}
+
+// ---------------------------------------------------------------------------
+// Hourly crew labour and the crew directory
+// ---------------------------------------------------------------------------
+
+export function getLabour(expenseId: string): Promise<EventLabourDto> {
+  return request(`/api/labour/${expenseId}`);
+}
+
+export function getEventLabour(bookingId: number): Promise<EventLabourDto | null> {
+  return request(`/api/labour/events/${bookingId}`);
+}
+
+export interface LabourLineFormValues {
+  id: string; // stays the same across edits; new rows get a fresh one
+  crewMemberId: string | null;
+  workerName: string;
+  role: string | null;
+  minutes: number;
+  rateCents: number;
+}
+
+// `expectedUpdatedAt` is null for the first labour entered on an event.
+export function saveEventLabour(bookingId: number, lines: LabourLineFormValues[], expectedUpdatedAt: string | null): Promise<EventLabourDto> {
+  return changed(request(`/api/labour/events/${bookingId}`, json('PUT', { lines, expectedUpdatedAt })));
+}
+
+export interface LabourPaymentFormValues {
+  amountCents: number;
+  paidOn: string;
+  paidByEmail: string;
+  paymentMethod: PaymentMethod;
+  fundingSource: FundingSource;
+  reimbursable: boolean;
+  reference: string | null;
+  notes: string | null;
+}
+
+// `id` is made once per payment, so a retried save can't pay twice.
+export function recordLabourPayment(lineId: string, id: string, values: LabourPaymentFormValues): Promise<EventLabourDto> {
+  return changed(request(`/api/labour/lines/${lineId}/payments`, json('POST', { id, ...values })));
+}
+
+export function listCrew(): Promise<CrewMemberDto[]> {
+  return request('/api/crew');
+}
+
+export function getCrewMember(id: string): Promise<CrewMemberDetailDto> {
+  return request(`/api/crew/${id}`);
+}
+
+export interface CrewMemberFormValues {
+  name: string;
+  phone: string | null;
+  email: string | null;
+  role: string | null;
+  company: string | null;
+  defaultRateCents: number | null;
+  notes: string | null;
+  active: boolean;
+}
+
+export function createCrewMember(id: string, values: CrewMemberFormValues): Promise<CrewMemberDetailDto> {
+  return changed(request('/api/crew', json('POST', { id, ...values })));
+}
+
+export function updateCrewMember(id: string, values: CrewMemberFormValues, expectedUpdatedAt: string): Promise<CrewMemberDetailDto> {
+  return changed(request(`/api/crew/${id}`, json('PATCH', { ...values, expectedUpdatedAt })));
 }
