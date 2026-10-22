@@ -321,6 +321,7 @@ export interface CrewWorkDto extends LabourPayState {
   labourExpenseId: string;
   booking: { id: number; title: string; eventDate: string } | null;
   workedOn: string; // the labour's date
+  workerName: string; // as entered for this event
   role: string | null;
   minutes: number;
   rateCents: number;
@@ -350,8 +351,10 @@ export interface CrewMemberDetailDto extends CrewMemberDto {
   work: CrewWorkDto[]; // newest first
 }
 
-// Every live labour line worked by these crew members, with what was paid.
-async function workFor(reader: Tx | typeof db, crewIds: string[] | 'all'): Promise<(CrewWorkDto & { crewMemberId: string })[]> {
+// Every live labour line worked by these crew members — every profile
+// ('all'), or the one-off people with no profile ('one-off') — with what
+// was paid.
+async function workFor(reader: Tx | typeof db, crewIds: string[] | 'all' | 'one-off'): Promise<(CrewWorkDto & { crewMemberId: string | null })[]> {
   const rows = await reader
     .select({ line: expenseLabourLines, labour: { id: expenses.id, bookingId: expenses.bookingId, expenseDate: expenses.expenseDate } })
     .from(expenseLabourLines)
@@ -359,7 +362,11 @@ async function workFor(reader: Tx | typeof db, crewIds: string[] | 'all'): Promi
     .where(
       and(
         isNull(expenses.deletedAt),
-        crewIds === 'all' ? isNotNull(expenseLabourLines.crewMemberId) : inArray(expenseLabourLines.crewMemberId, crewIds.length ? crewIds : ['']),
+        crewIds === 'all'
+          ? isNotNull(expenseLabourLines.crewMemberId)
+          : crewIds === 'one-off'
+            ? isNull(expenseLabourLines.crewMemberId)
+            : inArray(expenseLabourLines.crewMemberId, crewIds.length ? crewIds : ['']),
       ),
     )
     .orderBy(desc(expenses.expenseDate), desc(expenses.createdAt));
@@ -373,11 +380,12 @@ async function workFor(reader: Tx | typeof db, crewIds: string[] | 'all'): Promi
     : [];
   const bookingById = new Map(bookingRows.map((b) => [b.id, { id: b.id, title: b.title || 'Untitled event', eventDate: b.eventDate }]));
   return rows.map(({ line, labour }) => ({
-    crewMemberId: line.crewMemberId!,
+    crewMemberId: line.crewMemberId,
     lineId: line.id,
     labourExpenseId: labour.id,
     booking: labour.bookingId !== null ? (bookingById.get(labour.bookingId) ?? null) : null,
     workedOn: labour.expenseDate,
+    workerName: line.workerName,
     role: line.role,
     minutes: line.minutes,
     rateCents: line.rateCents,
@@ -418,6 +426,13 @@ export async function listCrew(): Promise<CrewMemberDto[]> {
       work.filter((w) => w.crewMemberId === m.id),
     ),
   );
+}
+
+// One-off people (typed in on an event, not on the crew list) who are still
+// owed money, oldest first — so Owed to crew covers everyone, not only
+// profiles.
+export async function unpaidOneOffs(): Promise<CrewWorkDto[]> {
+  return (await workFor(db, 'one-off')).filter((w) => w.remainingCents > 0).reverse();
 }
 
 export async function getCrewMember(id: string, reader: Tx | typeof db = db): Promise<CrewMemberDetailDto | null> {

@@ -8,8 +8,9 @@ import CrewFormSheet from './CrewFormSheet';
 import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import ErrorState from '@/components/ui/ErrorState';
 import { useCachedData } from '@/hooks/useCachedData';
-import { CREW_KEY, listCrew, type CrewMemberDto } from '@/lib/financeApi';
+import { CREW_KEY, CREW_ONE_OFFS_KEY, getUnpaidOneOffs, listCrew, type CrewMemberDto } from '@/lib/financeApi';
 import { formatCents } from '@/lib/money';
+import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 
 // The crew / contractor directory: who they are, their usual rate, and
 // whether they're still owed anything. A row opens their profile.
@@ -17,9 +18,12 @@ export default function CrewList() {
   const router = useRouter();
   const { version, notifyChanged } = useExpenseEntry();
   const { data: crew, error } = useCachedData(CREW_KEY, listCrew, version);
+  const oneOffsData = useCachedData(CREW_ONE_OFFS_KEY, getUnpaidOneOffs, version).data;
+  const oneOffs = useMemo(() => oneOffsData ?? [], [oneOffsData]);
   const [query, setQuery] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [adding, setAdding] = useState(false);
+  const today = todayLocal();
 
   const inactiveCount = (crew ?? []).filter((c) => !c.active).length;
   const shown = useMemo(() => {
@@ -31,7 +35,12 @@ export default function CrewList() {
         return words.every((w) => haystack.includes(w));
       });
   }, [crew, query, showInactive]);
-  const owedTotal = (crew ?? []).reduce((s, c) => s + c.totals.remainingCents, 0);
+  const shownOneOffs = useMemo(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return showInactive ? [] : oneOffs.filter((w) => words.every((word) => `${w.workerName} ${w.booking?.title ?? ''}`.toLowerCase().includes(word)));
+  }, [oneOffs, query, showInactive]);
+  // Everyone still owed: crew on the list and one-off people alike.
+  const owedTotal = (crew ?? []).reduce((s, c) => s + c.totals.remainingCents, 0) + oneOffs.reduce((s, w) => s + w.remainingCents, 0);
 
   if (error && !crew) return <ErrorState message={error} />;
   if (!crew) return <div className="h-40 animate-pulse rounded-3xl bg-white/[0.03]" aria-busy="true" />;
@@ -45,7 +54,7 @@ export default function CrewList() {
         </section>
       ) : null}
 
-      {crew.length > 0 ? (
+      {crew.length > 0 || oneOffs.length > 0 ? (
         <div className="flex items-center gap-2">
           <label className="relative block min-w-0 flex-1">
             <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
@@ -70,7 +79,7 @@ export default function CrewList() {
         </div>
       ) : null}
 
-      {crew.length === 0 ? (
+      {crew.length === 0 && oneOffs.length > 0 ? null : crew.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] px-6 py-12 text-center">
           <Users size={26} className="text-[var(--flat-text-ghost)]" />
           <p className="text-[15px] font-bold text-white">No crew yet</p>
@@ -85,6 +94,33 @@ export default function CrewList() {
           ))}
         </ul>
       )}
+
+      {shownOneOffs.length > 0 ? (
+        // People typed in on an event without a profile, while they're owed.
+        <section>
+          <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--flat-text-faint)]">One-off · not on the crew list</p>
+          <ul className="divide-y divide-[var(--flat-border)] rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] px-4">
+            {shownOneOffs.map((w) => (
+              <li key={w.lineId}>
+                <Link href={`/expenses/${w.labourExpenseId}?from=/finances/crew`} className="flex items-center gap-3 py-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-sm font-bold text-white">{w.workerName.charAt(0).toUpperCase()}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold text-white">{w.workerName}</span>
+                    <span className="mt-0.5 block truncate text-xs text-[var(--flat-text-faint)]">
+                      {[w.booking?.title ?? 'Deleted event', friendlyDate(w.workedOn, today)].join(' · ')}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="block text-[15px] font-bold tabular-nums text-[var(--neon-orange)]">{formatCents(w.remainingCents)}</span>
+                    <span className="block text-[11px] text-[var(--flat-text-faint)]">owed</span>
+                  </span>
+                  <ChevronRight size={16} className="shrink-0 text-white/30" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <button type="button" onClick={() => setAdding(true)} className="flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-[#0a0a0a]">
         <Plus size={20} />

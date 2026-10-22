@@ -204,3 +204,10 @@ export function createCrewMember(id: string, values: CrewMemberFormValues): Prom
 export function updateCrewMember(id: string, values: CrewMemberFormValues, expectedUpdatedAt: string): Promise<CrewMemberDetailDto> {
   return changed(request(`/api/crew/${id}`, json('PATCH', { ...values, expectedUpdatedAt })));
 }
+
+// One-off crew (typed in on an event, not on the crew list) still owed money.
+export const CREW_ONE_OFFS_KEY = 'expenses:crew-one-offs';
+
+export function getUnpaidOneOffs(): Promise<CrewWorkDto[]> {
+  return request('/api/crew/one-offs');
+}

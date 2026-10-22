@@ -304,8 +304,17 @@ test('one-off people work without a profile and stay out of the directory', asyn
   const dto = await save(b, [oneOff], null);
   assert.equal(dto.lines[0].crewMemberId, null);
   assert.ok(!(await labour.listCrew()).some((c) => c.name === 'Cousin Dave'));
+  // …but while they're owed, they're listed under Owed to crew.
+  let owed = (await labour.unpaidOneOffs()).find((w) => w.workerName === 'Cousin Dave');
+  assert.deepEqual([owed?.booking?.title, owed?.remainingCents, owed?.status], ['Small gig', 6000, 'unpaid']);
+  await pay(oneOff.id, 2500);
+  owed = (await labour.unpaidOneOffs()).find((w) => w.workerName === 'Cousin Dave');
+  assert.deepEqual([owed?.remainingCents, owed?.status], [3500, 'partial']);
+  await pay(oneOff.id, 3500);
+  assert.ok(!(await labour.unpaidOneOffs()).some((w) => w.workerName === 'Cousin Dave')); // paid: off the list
+  const latest = (await labour.getEventLabour(b))!;
   // An unknown profile id is refused.
-  await assert.rejects(save(b, [{ ...oneOff, crewMemberId: randomUUID() }], dto.updatedAt), /crew member was not found/);
+  await assert.rejects(save(b, [{ ...oneOff, crewMemberId: randomUUID() }], latest.updatedAt), /crew member was not found/);
 });
 
 test('arbitrary hours: no shifts, minimums or overtime', async () => {
