@@ -247,6 +247,10 @@ test('a partner who pays crew from their own pocket is owed it back — once', a
   // only real money (here, the company-card crew payments she made).
   const anaOutlay = await finance.listExpenses({ paidByEmail: 'ana@example.com', view: 'outlay' });
   assert.equal(anaOutlay.filter((e) => e.kind === 'labour').length, 0);
+  // Whatever view a screen asks for, her "paid by" list never holds labour.
+  for (const view of [undefined, 'cost', 'outlay'] as const) {
+    assert.ok(!(await finance.listExpenses({ paidByEmail: 'ana@example.com', view })).some((e) => e.kind === 'labour'), String(view));
+  }
   assert.equal((await finance.getPartnerSummary('ana@example.com'))?.spentCents, anaOutlay.reduce((s, e) => s + e.amountCents, 0));
 
   // Paying Ben back goes through the usual partner payment.

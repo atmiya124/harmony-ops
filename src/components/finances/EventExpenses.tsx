@@ -123,7 +123,13 @@ export default function EventExpenses({ initialRange }: { initialRange: string |
                 ) : null}
                 <ul className="mt-1 divide-y divide-[var(--flat-border)]">
                   {g.expenses.map((e) => (
-                    <ExpenseRow key={e.id} expense={e} details={`${friendlyDate(e.expenseDate, today)} · ${nameFor(e.paidByEmail)}`} amount={formatCents(e.amountCents)} />
+                    <ExpenseRow
+                      key={e.id}
+                      expense={e}
+                      // Labour wasn't paid by whoever entered it, so no partner name.
+                      details={e.kind === 'labour' ? friendlyDate(e.expenseDate, today) : `${friendlyDate(e.expenseDate, today)} · ${nameFor(e.paidByEmail)}`}
+                      amount={formatCents(e.amountCents)}
+                    />
                   ))}
                 </ul>
               </section>

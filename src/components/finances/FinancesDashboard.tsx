@@ -164,11 +164,24 @@ export default function FinancesDashboard() {
               <ul className="divide-y divide-[var(--flat-border)]">
                 {partnersBySpend.map((p) => {
                   const spent = view.spentBy.get(p.email) ?? { own: 0, company: 0 };
+                  // Still waiting to be paid back: orange, so it stands out from settled partners.
+                  const owed = p.outstandingCents > 0;
                   return (
                     <li key={p.email}>
                       <Link href={`/finances/partners/${encodeURIComponent(p.email)}`} className="flex items-center gap-3 py-3">
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-sm font-bold text-white">{partnerLabel(p).charAt(0)}</span>
-                        <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-white">{partnerLabel(p)}</span>
+                        <span
+                          className={`flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                            owed ? 'bg-[rgba(251,146,60,0.16)] text-[var(--neon-orange)] ring-1 ring-[rgba(251,146,60,0.45)]' : 'bg-white/[0.08] text-white'
+                          }`}
+                        >
+                          {partnerLabel(p).charAt(0)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] font-bold text-white">{partnerLabel(p)}</span>
+                          <span className={`block truncate text-xs ${owed ? 'text-[var(--neon-orange)]' : 'text-[var(--flat-text-faint)]'}`}>
+                            {owed ? `${formatCents(p.outstandingCents)} not paid back` : 'All paid back'}
+                          </span>
+                        </span>
                         <span className="shrink-0 text-[15px] font-bold tabular-nums text-white">{formatCents(spent.own + spent.company)}</span>
                         <ChevronRight size={16} className="shrink-0 text-white/30" />
                       </Link>

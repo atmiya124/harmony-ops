@@ -337,7 +337,12 @@ export async function listExpenses(filter: ExpenseFilter = {}): Promise<ExpenseD
   if (filter.to) where.push(lte(expenses.expenseDate, filter.to));
   if (filter.bookingId === 'general') where.push(isNull(expenses.bookingId));
   else if (filter.bookingId !== undefined) where.push(eq(expenses.bookingId, filter.bookingId));
-  if (filter.paidByEmail) where.push(eq(expenses.paidByEmail, normalizeEmail(filter.paidByEmail)));
+  if (filter.paidByEmail) {
+    where.push(eq(expenses.paidByEmail, normalizeEmail(filter.paidByEmail)));
+    // A labour row's payer only says who entered the hours; it was never
+    // their money, so it's never in anyone's "paid by" list.
+    where.push(ne(expenses.kind, 'labour'));
+  }
   if (filter.category) where.push(eq(expenses.category, filter.category));
   if (filter.view === 'cost') where.push(ne(expenses.kind, 'labour_payment'));
   if (filter.view === 'outlay') where.push(ne(expenses.kind, 'labour'));

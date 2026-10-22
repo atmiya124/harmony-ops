@@ -41,7 +41,8 @@ export default function PartnerDetail({ email }: { email: string }) {
     <div className="space-y-4 pb-6">
       <section className="rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] p-5">
         <p className="text-xs text-[var(--flat-text-faint)]">Owed back to {partnerLabel(summary.partner)}</p>
-        <p className="mt-1 text-[40px] font-bold leading-none tabular-nums text-white">{formatCents(summary.owedCents)}</p>
+        {/* Orange while money is still owed back; white once settled. */}
+        <p className={`mt-1 text-[40px] font-bold leading-none tabular-nums ${summary.owedCents > 0 ? 'text-[var(--neon-orange)]' : 'text-white'}`}>{formatCents(summary.owedCents)}</p>
         <p className="mt-2 text-xs text-[var(--flat-text-faint)]">{formatCents(summary.reimbursedCents)} paid back so far</p>
         {paid ? (
           <p role="status" className="mt-3 flex items-center gap-1.5 text-sm font-bold text-[var(--neon-green)]">
@@ -75,7 +76,7 @@ export default function PartnerDetail({ email }: { email: string }) {
         <h2 className="mb-1 flex items-baseline justify-between text-lg font-bold text-white">
           Expenses paid <span className="text-xs font-normal text-[var(--flat-text-faint)]">{summary.expenseCount}</span>
         </h2>
-        <ExpenseList filter={{ paidBy: email }} limit={500} emptyText={`${partnerLabel(summary.partner)} hasn't paid for anything yet`} />
+        <ExpenseList filter={{ paidBy: email, view: 'outlay' }} limit={500} emptyText={`${partnerLabel(summary.partner)} hasn't paid for anything yet`} />
       </section>
 
       {paying ? (
