@@ -1,38 +1,30 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { LogOut } from 'lucide-react';
-import { authClient } from '@/lib/auth/authClient';
 import type { Partner } from '@/lib/auth/session';
-import { salesPageFor } from '../navTypes';
-import SalesMenu from './SalesMenu';
+import { signOutToLogin } from './signOut';
 
-// On Sales screens the profile button opens the Sales menu (a side panel
-// with the Sales pages and Log out); elsewhere, a small account dropdown.
+// The top-right account button: a small dropdown with who's signed in and
+// Sign out. (The Sales pages are reached from the menu button beside the
+// title on Sales screens — see SalesMenuButton.)
 export default function ProfileMenu({ partner }: { partner: Partner }) {
   const [open, setOpen] = useState(false);
-  const salesPage = salesPageFor(usePathname());
-  const closeMenu = useCallback(() => setOpen(false), []);
   const [signingOut, setSigningOut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || salesPage) return;
+    if (!open) return;
     const close = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
-  }, [open, salesPage]);
+  }, [open]);
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    await authClient.signOut().catch(() => {});
-    // Full navigation (not router.push) so no signed-in client state or
-    // cached data survives sign-out.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign('/login');
+    await signOutToLogin();
   };
 
   return (
@@ -48,11 +40,7 @@ export default function ProfileMenu({ partner }: { partner: Partner }) {
         <Avatar partner={partner} />
       </button>
 
-      {open && salesPage !== null ? (
-        <SalesMenu partner={partner} active={salesPage} avatar={<Avatar partner={partner} />} signingOut={signingOut} onSignOut={handleSignOut} onClose={closeMenu} />
-      ) : null}
-
-      {open && salesPage === null ? (
+      {open ? (
         <div className="absolute right-0 top-full z-40 mt-2 w-60 rounded-xl border border-[var(--flat-border-strong)] bg-[#0b131c] p-3 shadow-lg shadow-black/40">
           <p className="truncate text-[13px] font-bold text-white">{partner.name}</p>
           <p className="mt-0.5 truncate text-[11px] text-[var(--flat-text-faint)]">{partner.email}</p>
@@ -70,7 +58,7 @@ export default function ProfileMenu({ partner }: { partner: Partner }) {
   );
 }
 
-function Avatar({ partner }: { partner: Partner }) {
+export function Avatar({ partner }: { partner: Partner }) {
   const initial = (partner.name || partner.email).charAt(0).toUpperCase();
   if (partner.image) {
     // Google profile photos come from lh3.googleusercontent.com; a plain
@@ -78,9 +66,5 @@ function Avatar({ partner }: { partner: Partner }) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={partner.image} alt="" referrerPolicy="no-referrer" className="size-11 rounded-full" />;
   }
-  return (
-    <span className="flex size-11 items-center justify-center rounded-full text-lg font-bold text-white">
-      {initial}
-    </span>
-  );
+  return <span className="flex size-11 items-center justify-center rounded-full text-lg font-bold text-white">{initial}</span>;
 }

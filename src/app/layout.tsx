@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import AppNav from '@/components/AppNav';
 import AppFrame from '@/components/navigation/AppFrame';
 import ProfileMenu from '@/components/auth/ProfileMenu';
+import { PartnerProvider } from '@/components/auth/PartnerContext';
 import ExpenseEntryProvider from '@/components/expenses/ExpenseEntryProvider';
 import NavDirectionTracker from '@/components/navigation/NavDirectionTracker';
 import { getCurrentPartner } from '@/lib/auth/session';
@@ -47,11 +48,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <header className="absolute right-4 top-4 z-40" style={{ viewTransitionName: 'app-header' }}>
                 <ProfileMenu partner={partner} />
               </header>
-              <ExpenseEntryProvider>
-                <NavDirectionTracker />
-                <main className="relative px-4 pb-32 pt-4">{children}</main>
-                <AppNav />
-              </ExpenseEntryProvider>
+              <PartnerProvider partner={partner}>
+                <ExpenseEntryProvider>
+                  <NavDirectionTracker />
+                  <main className="relative px-4 pb-32 pt-4">{children}</main>
+                  <AppNav />
+                </ExpenseEntryProvider>
+              </PartnerProvider>
             </>
           ) : (
             <main className="relative px-4 pb-16 pt-6">{children}</main>

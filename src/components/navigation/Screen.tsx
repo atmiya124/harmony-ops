@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import SectionTabs from '@/components/SectionTabs';
+import SalesMenuButton from '@/components/auth/SalesMenuButton';
+import { SALES_PAGES } from '@/components/navTypes';
 import { parentOf } from './navDirection';
 
 // Wraps each page so route changes animate like native iOS navigation: the
@@ -164,6 +166,8 @@ export default function Screen({
               <ChevronLeft size={28} />
             </Link>
           ) : null}
+          {/* Sales list pages: the ☰ that opens the Sales menu, beside the title. */}
+          {!back && SALES_PAGES.some((p) => p.href === pathname) ? <SalesMenuButton /> : null}
           {leading && !hideTitle ? <span className="mr-3 flex shrink-0 items-center">{leading}</span> : null}
           <h1
             className={

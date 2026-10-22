@@ -18,8 +18,8 @@ const ICONS: Record<SalesPageKey, Icon> = {
 
 const SLIDE_MS = 220;
 
-// The Sales menu: a light panel that slides in from the right when the
-// profile button is tapped on a Sales screen. Who's signed in at the top,
+// The Sales menu: a light panel that slides in from the left when the menu
+// button beside a Sales screen's title is tapped. Who's signed in at the top,
 // the Sales pages, and Log out pinned to the bottom.
 export default function SalesMenu({
   partner,
@@ -66,8 +66,8 @@ export default function SalesMenu({
     };
   }, [onClose]);
 
-  // Portalled to <body>: the profile button's header is its own stacking
-  // layer (below the tab bar), and the menu must cover everything.
+  // Portalled to <body>: screen headers are their own stacking layers
+  // (below the tab bar), and the menu must cover everything.
   return createPortal(
     <div className="tone-light fixed inset-0 z-[90]" role="dialog" aria-modal="true" aria-label="Sales menu">
       <button
@@ -81,7 +81,7 @@ export default function SalesMenu({
       <div
         ref={panel}
         tabIndex={-1}
-        className={`absolute inset-y-0 right-0 flex w-[300px] max-w-[86vw] flex-col bg-[var(--bg)] shadow-[-12px_0_40px_rgba(0,0,0,0.18)] outline-none transition-transform ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none ${shown ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`absolute inset-y-0 left-0 flex w-[300px] max-w-[86vw] flex-col bg-[var(--bg)] shadow-[12px_0_40px_rgba(0,0,0,0.18)] outline-none transition-transform ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none ${shown ? 'translate-x-0' : '-translate-x-full'}`}
         style={{ transitionDuration: `${SLIDE_MS}ms` }}
       >
         {/* Who's signed in. */}
