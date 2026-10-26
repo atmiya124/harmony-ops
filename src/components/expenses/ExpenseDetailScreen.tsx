@@ -62,7 +62,7 @@ export default function ExpenseDetailScreen({ id, children }: { id: string; chil
         type="button"
         onClick={() => openLabour(expense.bookingId!)}
         aria-label="Edit hours"
-        className="flex size-11 items-center justify-center rounded-full border border-[rgba(251,146,60,0.35)] bg-[rgba(251,146,60,0.14)] text-[var(--neon-orange)]"
+        className="flex size-11 items-center justify-center rounded-full bg-white text-[#0a0a0a] transition-transform duration-75 active:scale-[0.95]"
       >
         <Pencil size={18} strokeWidth={2.25} />
       </button>
@@ -70,7 +70,7 @@ export default function ExpenseDetailScreen({ id, children }: { id: string; chil
       <Link
         href={`${detailsPath}/edit`}
         aria-label="Edit expense"
-        className="flex size-11 items-center justify-center rounded-full border border-[rgba(251,146,60,0.35)] bg-[rgba(251,146,60,0.14)] text-[var(--neon-orange)]"
+        className="flex size-11 items-center justify-center rounded-full bg-white text-[#0a0a0a] transition-transform duration-75 active:scale-[0.95]"
       >
         <Pencil size={18} strokeWidth={2.25} />
       </Link>

@@ -21,7 +21,7 @@ export default function CrewMemberPage({ params }: { params: Promise<{ id: strin
       type="button"
       onClick={() => setEditing(true)}
       aria-label="Edit profile"
-      className="flex size-11 items-center justify-center rounded-full border border-[rgba(251,146,60,0.35)] bg-[rgba(251,146,60,0.14)] text-[var(--neon-orange)]"
+      className="flex size-11 items-center justify-center rounded-full bg-white text-[#0a0a0a] transition-transform duration-75 active:scale-[0.95]"
     >
       <Pencil size={18} strokeWidth={2.25} />
     </button>
