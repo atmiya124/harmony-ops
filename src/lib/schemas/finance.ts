@@ -8,6 +8,8 @@ import {
   MAX_HST_RATE_BP,
   PAYMENT_METHODS,
   REIMBURSEMENT_METHODS,
+  type FundingSource,
+  type PaymentMethod,
 } from '../finance/types';
 import { defaultFundingSource, defaultReimbursable, isValidReimbursable } from '../finance/reimbursement';
 import { MAX_CREW_ROLE, MAX_LABOUR_LINES, MAX_LABOUR_MINUTES, MAX_WORKER_NAME } from '../finance/labour';
@@ -146,30 +148,59 @@ export type LabourSaveInput = z.output<typeof labourSaveSchema>;
 // Paying one crew person, later and separately from entering hours. The
 // same "who paid / paid with / whose money" fields as an expense, so a
 // partner paying from their own pocket is owed it back like any expense.
+function labourPaymentFields(today: string) {
+  return {
+    paidOn: pastDate(today),
+    paidByEmail: z.string().trim().toLowerCase().pipe(z.email('Choose who paid')),
+    paymentMethod: z.enum(PAYMENT_METHODS, 'Choose a payment method'),
+    fundingSource: z.enum(FUNDING_SOURCES).optional(),
+    reimbursable: z.boolean().optional(),
+    reference: optionalText(100),
+    notes: optionalText(500),
+  };
+}
+
+function withFunding<T extends { paymentMethod: PaymentMethod; fundingSource?: FundingSource; reimbursable?: boolean }>(v: T) {
+  const fundingSource = v.fundingSource ?? defaultFundingSource(v.paymentMethod);
+  return { ...v, fundingSource, reimbursable: v.reimbursable ?? defaultReimbursable(fundingSource) };
+}
+
+function checkReimbursable(v: { fundingSource: FundingSource; reimbursable: boolean }, ctx: z.RefinementCtx) {
+  if (!isValidReimbursable(v.fundingSource, v.reimbursable)) {
+    ctx.addIssue({ code: 'custom', path: ['reimbursable'], message: 'Company-paid payments are never reimbursed' });
+  }
+}
+
 export function labourPaymentSchema(today: string) {
   return z
-    .object({
-      id: z.uuid('Invalid payment id'),
-      amountCents: positiveCents,
-      paidOn: pastDate(today),
-      paidByEmail: z.string().trim().toLowerCase().pipe(z.email('Choose who paid')),
-      paymentMethod: z.enum(PAYMENT_METHODS, 'Choose a payment method'),
-      fundingSource: z.enum(FUNDING_SOURCES).optional(),
-      reimbursable: z.boolean().optional(),
-      reference: optionalText(100),
-      notes: optionalText(500),
-    })
-    .transform((v) => {
-      const fundingSource = v.fundingSource ?? defaultFundingSource(v.paymentMethod);
-      return { ...v, fundingSource, reimbursable: v.reimbursable ?? defaultReimbursable(fundingSource) };
-    })
-    .superRefine((v, ctx) => {
-      if (!isValidReimbursable(v.fundingSource, v.reimbursable)) {
-        ctx.addIssue({ code: 'custom', path: ['reimbursable'], message: 'Company-paid payments are never reimbursed' });
-      }
-    });
+    .object({ id: z.uuid('Invalid payment id'), amountCents: positiveCents, ...labourPaymentFields(today) })
+    .transform(withFunding)
+    .superRefine(checkReimbursable);
 }
 export type LabourPaymentInput = z.output<ReturnType<typeof labourPaymentSchema>>;
+
+export const MAX_BATCH_PAYMENTS = 100;
+
+// Paying several crew lines in one go ("Pay all"): one shared who / how /
+// when, and per line its own payment id and the amount the screen showed as
+// owed, so hours changed meanwhile can't be overpaid.
+export function labourBatchPaymentSchema(today: string) {
+  return z
+    .object({
+      payments: z
+        .array(z.object({ id: z.uuid('Invalid payment id'), lineId: z.uuid('Invalid crew hours'), amountCents: positiveCents }))
+        .min(1, 'Choose who to pay')
+        .max(MAX_BATCH_PAYMENTS, `Pay at most ${MAX_BATCH_PAYMENTS} at once`),
+      ...labourPaymentFields(today),
+    })
+    .transform(withFunding)
+    .superRefine((v, ctx) => {
+      checkReimbursable(v, ctx);
+      if (new Set(v.payments.map((p) => p.lineId)).size !== v.payments.length) ctx.addIssue({ code: 'custom', path: ['payments'], message: 'Duplicate crew hours' });
+      if (new Set(v.payments.map((p) => p.id)).size !== v.payments.length) ctx.addIssue({ code: 'custom', path: ['payments'], message: 'Duplicate payment id' });
+    });
+}
+export type LabourBatchPaymentInput = z.output<ReturnType<typeof labourBatchPaymentSchema>>;
 
 // A crew / contractor profile. Only the name is required.
 const crewFields = {

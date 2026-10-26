@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkLabourEdit, checkLabourPayment, countsAsCost, countsAsOutlay, formatHours, labourPayState, labourSummaryLabel, lineAmountCents, parseHours, summarizeLabour, totalPayState } from './labour';
+import { checkLabourEdit, checkLabourPayment, countsAsCost, countsAsOutlay, formatHours, labourPayState, paidPercent, labourSummaryLabel, lineAmountCents, parseHours, summarizeLabour, totalPayState } from './labour';
 
 test('parseHours accepts decimal and clock forms', () => {
   assert.deepEqual(parseHours('6.5'), { ok: true, minutes: 390 });
@@ -80,4 +80,12 @@ test('labour counts as cost, crew payments as outlay — never both', () => {
   const rows = [{ kind: 'expense' as const }, { kind: 'labour' as const }, { kind: 'labour_payment' as const }];
   assert.deepEqual(rows.filter(countsAsCost).map((r) => r.kind), ['expense', 'labour']);
   assert.deepEqual(rows.filter(countsAsOutlay).map((r) => r.kind), ['expense', 'labour_payment']);
+});
+
+test('paidPercent rounds down and only reads 100 once fully paid', () => {
+  assert.equal(paidPercent({ earnedCents: 20000, paidCents: 0 }), 0);
+  assert.equal(paidPercent({ earnedCents: 20000, paidCents: 8000 }), 40);
+  assert.equal(paidPercent({ earnedCents: 20000, paidCents: 19999 }), 99);
+  assert.equal(paidPercent({ earnedCents: 100000, paidCents: 1 }), 1);
+  assert.equal(paidPercent({ earnedCents: 20000, paidCents: 20000 }), 100);
 });

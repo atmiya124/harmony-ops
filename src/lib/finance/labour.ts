@@ -103,6 +103,14 @@ export function totalPayState(states: LabourPayState[]): LabourPayState {
   return { earnedCents: earned, paidCents: paid, remainingCents: remaining, status: paid <= 0 ? 'unpaid' : remaining > 0 ? 'partial' : 'paid' };
 }
 
+// Whole percent paid, rounded down so it only reads 100 once fully paid (and
+// at least 1 once anything is).
+export function paidPercent(state: Pick<LabourPayState, 'earnedCents' | 'paidCents'>): number {
+  if (state.earnedCents <= 0 || state.paidCents <= 0) return 0;
+  if (state.paidCents >= state.earnedCents) return 100;
+  return Math.max(1, Math.floor((state.paidCents * 100) / state.earnedCents));
+}
+
 export type Check = { ok: true } | { ok: false; error: string };
 
 // A payment can settle what's owed but never more, so "paid" can't run ahead

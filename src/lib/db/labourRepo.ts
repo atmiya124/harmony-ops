@@ -10,7 +10,7 @@ import { bookings, crewMembers, expenseLabourLines, expenses, type CrewMemberRow
 import { audit, FinanceError, livePaidByLine, nextTimestamp, nowIso, type Actor, type Tx } from './financeRepo';
 import { getPartnerEmails, normalizeEmail } from '../auth/allowlist';
 import { checkLabourEdit, checkLabourPayment, labourPayState, lineAmountCents, totalPayState, type LabourPayState } from '../finance/labour';
-import { isCalendarDate, type CrewMemberCreate, type CrewMemberUpdate, type LabourPaymentInput, type LabourSaveInput } from '../schemas/finance';
+import { isCalendarDate, type CrewMemberCreate, type CrewMemberUpdate, type LabourBatchPaymentInput, type LabourPaymentInput, type LabourSaveInput } from '../schemas/finance';
 import type { FundingSource, PaymentMethod } from '../finance/types';
 
 // ---------------------------------------------------------------------------
@@ -263,53 +263,88 @@ export async function saveEventLabour(bookingId: number, input: LabourSaveInput,
 // from their own pocket is owed it back through the usual reimbursements.
 export async function recordLabourPayment(lineId: string, input: LabourPaymentInput, actor: Actor): Promise<EventLabourDto> {
   return db.transaction(async (tx) => {
-    const [line] = await tx.select().from(expenseLabourLines).where(eq(expenseLabourLines.id, lineId));
-    if (!line) throw new FinanceError(404, 'Crew hours not found');
-    const [labour] = await tx.select().from(expenses).where(eq(expenses.id, line.expenseId));
-    if (!labour || labour.deletedAt) throw new FinanceError(409, 'This labour was removed');
-
-    // Retried request: the payment is already there, so don't pay twice.
-    const [existing] = await tx.select().from(expenses).where(eq(expenses.id, input.id));
-    if (existing) {
-      if (existing.createdByUserId === actor.id && existing.labourLineId === lineId) return toEventLabour(tx, labour);
-      throw new FinanceError(409, 'A payment with this id already exists');
-    }
-
-    if (!getPartnerEmails().has(normalizeEmail(input.paidByEmail))) {
-      throw new FinanceError(422, 'Paid by must be one of the partners', { paidByEmail: ['Choose one of the partners'] });
-    }
-    const state = labourPayState(line.amountCents, [{ amountCents: (await livePaidByLine(tx, [line.id])).get(line.id) ?? 0 }]);
-    const check = checkLabourPayment(state, input.amountCents);
-    if (!check.ok) throw new FinanceError(422, check.error, { amountCents: [check.error] });
-
-    const at = nowIso();
-    const [row] = await tx
-      .insert(expenses)
-      .values({
-        id: input.id,
-        kind: 'labour_payment',
-        labourLineId: line.id,
-        bookingId: labour.bookingId,
-        category: 'crew',
-        amountCents: input.amountCents,
-        taxCents: 0,
-        expenseDate: input.paidOn,
-        paidByEmail: input.paidByEmail,
-        paymentMethod: input.paymentMethod,
-        fundingSource: input.fundingSource,
-        reimbursable: input.reimbursable,
-        reference: input.reference,
-        notes: input.notes,
-        createdByUserId: actor.id,
-        createdByEmail: actor.email,
-        updatedByEmail: actor.email,
-        createdAt: at,
-        updatedAt: at,
-      })
-      .returning();
-    await audit(tx, { entityType: 'expense', entityId: row.id, action: 'create', actor, before: null, after: row, at });
-    return toEventLabour(tx, labour);
+    checkPayer(input.paidByEmail);
+    return toEventLabour(tx, await insertLabourPayment(tx, lineId, input, actor));
   });
+}
+
+// "Pay all": several lines (one event's crew, or one person's events) paid
+// at once with the same who / how / when. All or nothing — if any line can't
+// take its amount (hours changed, already paid), nothing is recorded.
+export async function recordLabourPayments(input: LabourBatchPaymentInput, actor: Actor): Promise<{ count: number; amountCents: number }> {
+  return db.transaction(async (tx) => {
+    checkPayer(input.paidByEmail);
+    const { payments, ...shared } = input;
+    for (const p of payments) {
+      try {
+        await insertLabourPayment(tx, p.lineId, { ...shared, id: p.id, amountCents: p.amountCents }, actor);
+      } catch (err) {
+        // Say whose payment failed; the rest of the batch is rolled back.
+        const name = err instanceof FinanceError ? await workerNameOf(tx, p.lineId) : null;
+        if (err instanceof FinanceError && name) throw new FinanceError(err.status, `${name}: ${err.message}`, err.fieldErrors);
+        throw err;
+      }
+    }
+    return { count: payments.length, amountCents: payments.reduce((s, p) => s + p.amountCents, 0) };
+  });
+}
+
+function checkPayer(paidByEmail: string) {
+  if (!getPartnerEmails().has(normalizeEmail(paidByEmail))) {
+    throw new FinanceError(422, 'Paid by must be one of the partners', { paidByEmail: ['Choose one of the partners'] });
+  }
+}
+
+async function workerNameOf(tx: Tx, lineId: string): Promise<string | null> {
+  const [row] = await tx.select({ name: expenseLabourLines.workerName }).from(expenseLabourLines).where(eq(expenseLabourLines.id, lineId));
+  return row?.name ?? null;
+}
+
+// Inserts one payment against a line and returns the line's labour row.
+async function insertLabourPayment(tx: Tx, lineId: string, input: LabourPaymentInput, actor: Actor): Promise<ExpenseRow> {
+  const [line] = await tx.select().from(expenseLabourLines).where(eq(expenseLabourLines.id, lineId));
+  if (!line) throw new FinanceError(404, 'Crew hours not found');
+  const [labour] = await tx.select().from(expenses).where(eq(expenses.id, line.expenseId));
+  if (!labour || labour.deletedAt) throw new FinanceError(409, 'This labour was removed');
+
+  // Retried request: the payment is already there, so don't pay twice.
+  const [existing] = await tx.select().from(expenses).where(eq(expenses.id, input.id));
+  if (existing) {
+    if (existing.createdByUserId === actor.id && existing.labourLineId === lineId) return labour;
+    throw new FinanceError(409, 'A payment with this id already exists');
+  }
+
+  const state = labourPayState(line.amountCents, [{ amountCents: (await livePaidByLine(tx, [line.id])).get(line.id) ?? 0 }]);
+  const check = checkLabourPayment(state, input.amountCents);
+  if (!check.ok) throw new FinanceError(422, check.error, { amountCents: [check.error] });
+
+  const at = nowIso();
+  const [row] = await tx
+    .insert(expenses)
+    .values({
+      id: input.id,
+      kind: 'labour_payment',
+      labourLineId: line.id,
+      bookingId: labour.bookingId,
+      category: 'crew',
+      amountCents: input.amountCents,
+      taxCents: 0,
+      expenseDate: input.paidOn,
+      paidByEmail: input.paidByEmail,
+      paymentMethod: input.paymentMethod,
+      fundingSource: input.fundingSource,
+      reimbursable: input.reimbursable,
+      reference: input.reference,
+      notes: input.notes,
+      createdByUserId: actor.id,
+      createdByEmail: actor.email,
+      updatedByEmail: actor.email,
+      createdAt: at,
+      updatedAt: at,
+    })
+    .returning();
+  await audit(tx, { entityType: 'expense', entityId: row.id, action: 'create', actor, before: null, after: row, at });
+  return labour;
 }
 
 // ---------------------------------------------------------------------------

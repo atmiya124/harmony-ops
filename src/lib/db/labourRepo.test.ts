@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createClient, type Client } from '@libsql/client';
 import { splitMigration } from './migrationGuard';
-import { crewMemberCreateSchema, crewMemberUpdateSchema, expenseInputSchema, labourPaymentSchema, labourSaveSchema, reimbursementInputSchema } from '../schemas/finance';
+import { crewMemberCreateSchema, crewMemberUpdateSchema, expenseInputSchema, labourBatchPaymentSchema, labourPaymentSchema, labourSaveSchema, reimbursementInputSchema } from '../schemas/finance';
 import { countsAsCost, countsAsOutlay } from '../finance/labour';
 import { summarizeEvent } from '../finance/profit';
 
@@ -373,4 +373,51 @@ test('old lump-sum Crew expenses still work as plain expenses', async () => {
   assert.equal(expense.reimbursement.status, 'pending');
   const rows = await finance.listExpenses({ bookingId: b, view: 'cost' });
   assert.equal(costOf(rows), 30000);
+});
+
+test('Pay all pays several lines in full at once, all or nothing, and a retry pays once', async () => {
+  const b1 = await booking('Pay-all A');
+  const b2 = await booking('Pay-all B');
+  const mike = line({ workerName: 'Mike', minutes: 240, rateCents: 2500 }); // 10000
+  const sam = line({ workerName: 'Sam', minutes: 120, rateCents: 2000 }); // 4000
+  const lee = line({ workerName: 'Lee', minutes: 60, rateCents: 3000 }); // 3000
+  await save(b1, [mike, sam], null);
+  await save(b2, [lee], null);
+  await pay(sam.id, 1000); // Sam is part-paid: 3000 left
+
+  const batch = (payments: { id: string; lineId: string; amountCents: number }[]) =>
+    labour.recordLabourPayments(labourBatchPaymentSchema(TODAY).parse({ payments, paidOn: '2026-10-16', paidByEmail: 'ana@example.com', paymentMethod: 'etransfer' }), ana);
+
+  // One line asks for more than is owed: nothing at all is recorded.
+  await assert.rejects(
+    batch([
+      { id: randomUUID(), lineId: mike.id, amountCents: 10000 },
+      { id: randomUUID(), lineId: sam.id, amountCents: 4000 },
+    ]),
+    /Sam: Only \$30\.00 is owed/,
+  );
+  assert.equal((await labour.getEventLabour(b1))!.totals.paidCents, 1000);
+
+  const payments = [
+    { id: randomUUID(), lineId: mike.id, amountCents: 10000 },
+    { id: randomUUID(), lineId: sam.id, amountCents: 3000 },
+    { id: randomUUID(), lineId: lee.id, amountCents: 3000 },
+  ];
+  assert.deepEqual(await batch(payments), { count: 3, amountCents: 16000 });
+  assert.deepEqual(await batch(payments), { count: 3, amountCents: 16000 }); // retried: no double payment
+
+  const e1 = (await labour.getEventLabour(b1))!;
+  assert.equal(e1.totals.status, 'paid');
+  assert.deepEqual(e1.lines.map((l) => l.payments.length), [1, 2]);
+  assert.equal((await labour.getEventLabour(b2))!.totals.remainingCents, 0);
+});
+
+test('Pay all needs at least one line and refuses duplicates', () => {
+  const lineId = randomUUID();
+  const base = { paidOn: '2026-10-16', paidByEmail: 'ana@example.com', paymentMethod: 'cash' };
+  assert.equal(labourBatchPaymentSchema(TODAY).safeParse({ ...base, payments: [] }).success, false);
+  assert.equal(
+    labourBatchPaymentSchema(TODAY).safeParse({ ...base, payments: [{ id: randomUUID(), lineId, amountCents: 1 }, { id: randomUUID(), lineId, amountCents: 1 }] }).success,
+    false,
+  );
 });

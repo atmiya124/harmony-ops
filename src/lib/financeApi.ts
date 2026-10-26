@@ -178,6 +178,15 @@ export function recordLabourPayment(lineId: string, id: string, values: LabourPa
   return changed(request(`/api/labour/lines/${lineId}/payments`, json('POST', { id, ...values })));
 }
 
+// "Pay all": each line paid the amount shown, with one shared who / how /
+// when. Each payment's `id` is made once, so a retry can't pay twice.
+export function recordLabourPayments(
+  payments: { id: string; lineId: string; amountCents: number }[],
+  values: Omit<LabourPaymentFormValues, 'amountCents'>,
+): Promise<{ count: number; amountCents: number }> {
+  return changed(request('/api/labour/payments', json('POST', { payments, ...values })));
+}
+
 export function listCrew(): Promise<CrewMemberDto[]> {
   return request('/api/crew');
 }

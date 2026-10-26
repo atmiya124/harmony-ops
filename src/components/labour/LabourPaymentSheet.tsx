@@ -5,16 +5,24 @@ import { Banknote, Building2, CreditCard, Send } from 'lucide-react';
 import BottomSheet, { SheetButton, SheetError, SheetSection } from '@/components/ui/BottomSheet';
 import DateChip from '@/components/ui/DateChip';
 import { partnerLabel } from '@/components/expenses/partnerLabel';
-import { ApiError, FINANCE_PARTNERS_KEY, getPartners, recordLabourPayment, type EventLabourDto, type LabourLineDto, type PartnerOption } from '@/lib/financeApi';
+import { ApiError, FINANCE_PARTNERS_KEY, getPartners, recordLabourPayment, recordLabourPayments, type PartnerOption } from '@/lib/financeApi';
 import { loadCached, peekCache } from '@/lib/clientCache';
 import { centsToInput, formatCents, parseAmountToCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 import { defaultFundingSource } from '@/lib/finance/reimbursement';
 import { PAYMENT_METHOD_LABELS, type FundingSource, type PaymentMethod } from '@/lib/finance/types';
 
-// Recording money paid to one crew person, after their hours are in. Uses
-// the same "paid by / paid with / whose money" as an expense, so a partner
-// who paid from their own pocket shows up in Owed to partners.
+// Recording money paid to crew, after their hours are in. Uses the same
+// "paid by / paid with / whose money" as an expense, so a partner who paid
+// from their own pocket shows up in Owed to partners. One person can be paid
+// any amount up to what's owed; several ("Pay all") are each paid in full.
+
+export interface PayTarget {
+  lineId: string;
+  workerName: string;
+  remainingCents: number;
+  event?: string; // shown in a multi-person list, e.g. the event's title
+}
 
 const PAYMENT_ICONS: Record<PaymentMethod, typeof CreditCard> = {
   personal_card: CreditCard,
@@ -25,17 +33,21 @@ const PAYMENT_ICONS: Record<PaymentMethod, typeof CreditCard> = {
 const PAYMENT_ORDER: PaymentMethod[] = ['etransfer', 'cash', 'company_card', 'personal_card'];
 
 export default function LabourPaymentSheet({
-  line,
+  targets,
+  subtitle,
   onClose,
   onSaved,
 }: {
-  line: LabourLineDto;
+  targets: PayTarget[];
+  subtitle?: string;
   onClose: () => void;
-  onSaved: (labour: EventLabourDto, amountCents: number) => void;
+  onSaved: (amountCents: number, count: number) => void;
 }) {
   const today = todayLocal();
-  const [paymentId] = useState(() => crypto.randomUUID()); // a retried save can't pay twice
-  const [amountText, setAmountText] = useState(centsToInput(line.remainingCents));
+  const single = targets.length === 1 ? targets[0] : null;
+  const owedCents = targets.reduce((s, t) => s + t.remainingCents, 0);
+  const [paymentIds] = useState(() => targets.map(() => crypto.randomUUID())); // a retried save can't pay twice
+  const [amountText, setAmountText] = useState(centsToInput(owedCents));
   const [paidOn, setPaidOn] = useState(today);
   const [partners, setPartners] = useState<PartnerOption[]>(() => peekCache<{ partners: PartnerOption[] }>(FINANCE_PARTNERS_KEY)?.partners ?? []);
   const [paidByEmail, setPaidByEmail] = useState(() => peekCache<{ me: string }>(FINANCE_PARTNERS_KEY)?.me ?? '');
@@ -57,7 +69,7 @@ export default function LabourPaymentSheet({
       .catch((err) => setFormError(err instanceof Error ? err.message : 'Could not load partners'));
   }, []);
 
-  const amount = parseAmountToCents(amountText);
+  const amount = single ? parseAmountToCents(amountText) : ({ ok: true, cents: owedCents } as const);
   const fundingSource: FundingSource = method === 'cash' || method === 'etransfer' ? cashLikeFunding : defaultFundingSource(method);
   const touch = () => {
     setDirty(true);
@@ -67,14 +79,13 @@ export default function LabourPaymentSheet({
   async function handleSave() {
     const errors: Record<string, string> = {};
     if (!amount.ok) errors.amountCents = amount.error;
-    else if (amount.cents > line.remainingCents) errors.amountCents = `Only ${formatCents(line.remainingCents)} is owed`;
+    else if (amount.cents > owedCents) errors.amountCents = `Only ${formatCents(owedCents)} is owed`;
     if (!paidByEmail) errors.paidByEmail = 'Choose who paid';
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0 || !amount.ok) return;
     setSaving(true);
     try {
-      const labour = await recordLabourPayment(line.id, paymentId, {
-        amountCents: amount.cents,
+      const shared = {
         paidOn,
         paidByEmail,
         paymentMethod: method,
@@ -82,8 +93,10 @@ export default function LabourPaymentSheet({
         reimbursable: fundingSource === 'personal',
         reference: reference.trim() || null,
         notes: notes.trim() || null,
-      });
-      onSaved(labour, amount.cents);
+      };
+      if (single) await recordLabourPayment(single.lineId, paymentIds[0], { ...shared, amountCents: amount.cents });
+      else await recordLabourPayments(targets.map((t, i) => ({ id: paymentIds[i], lineId: t.lineId, amountCents: t.remainingCents })), shared);
+      onSaved(amount.cents, targets.length);
     } catch (err) {
       if (err instanceof ApiError) {
         const mapped: Record<string, string> = {};
@@ -101,49 +114,81 @@ export default function LabourPaymentSheet({
   const payer = partners.find((p) => p.email === paidByEmail);
   return (
     <BottomSheet
-      title="Record payment"
-      subtitle={`${line.workerName} · ${formatCents(line.remainingCents)} owed`}
+      title={single ? 'Record payment' : `Pay ${targets.length} in full`}
+      subtitle={subtitle ?? (single ? `${single.workerName} · ${formatCents(owedCents)} owed` : `${formatCents(owedCents)} owed`)}
       dirty={dirty}
       busy={saving}
       onClose={onClose}
       footer={
         <SheetButton busy={saving} disabled={!amount.ok || !paidByEmail} onClick={handleSave}>
-          {saving ? 'Saving…' : amount.ok ? `Record ${formatCents(amount.cents)}` : 'Record payment'}
+          {saving ? 'Saving…' : !single ? `Pay ${formatCents(owedCents)}` : amount.ok ? `Record ${formatCents(amount.cents)}` : 'Record payment'}
         </SheetButton>
       }
     >
       <div className="space-y-5">
-        <SheetSection label="Amount" error={fieldErrors.amountCents}>
-          <div className="flex items-center gap-2">
-            <label className="flex flex-1 items-center gap-1.5 rounded-2xl border border-[var(--flat-border)] bg-white/[0.04] px-3.5 py-3">
-              <span className="text-white/50">$</span>
-              <input
-                value={amountText}
-                onChange={(e) => {
-                  setAmountText(e.target.value.replace(/[^\d.,]/g, ''));
-                  setFieldErrors((f) => ({ ...f, amountCents: '' }));
+        {single ? (
+          <SheetSection label="Amount" error={fieldErrors.amountCents}>
+            <div className="flex items-center gap-2">
+              <label className="flex flex-1 items-center gap-1.5 rounded-2xl border border-[var(--flat-border)] bg-white/[0.04] px-3.5 py-3">
+                <span className="text-white/50">$</span>
+                <input
+                  value={amountText}
+                  onChange={(e) => {
+                    setAmountText(e.target.value.replace(/[^\d.,]/g, ''));
+                    setFieldErrors((f) => ({ ...f, amountCents: '' }));
+                    touch();
+                  }}
+                  inputMode="decimal"
+                  aria-label="Amount paid"
+                  className="w-full bg-transparent text-base font-bold tabular-nums text-white outline-none"
+                />
+              </label>
+              <DateChip
+                value={paidOn}
+                label={friendlyDate(paidOn, today)}
+                min="2025-01-01"
+                max={today}
+                onChange={(v) => {
+                  setPaidOn(v);
                   touch();
                 }}
-                inputMode="decimal"
-                aria-label="Amount paid"
-                className="w-full bg-transparent text-base font-bold tabular-nums text-white outline-none"
+                ariaLabel="Date paid"
+                className="rounded-2xl border border-[var(--flat-border)] bg-white/[0.03] px-3 py-3"
               />
-            </label>
-            <DateChip
-              value={paidOn}
-              label={friendlyDate(paidOn, today)}
-              min="2025-01-01"
-              max={today}
-              onChange={(v) => {
-                setPaidOn(v);
-                touch();
-              }}
-              ariaLabel="Date paid"
-              className="rounded-2xl border border-[var(--flat-border)] bg-white/[0.03] px-3 py-3"
-            />
-          </div>
-          {fieldErrors.paidOn ? <p className="mt-1.5 text-xs text-[var(--neon-pink)]">{fieldErrors.paidOn}</p> : null}
-        </SheetSection>
+            </div>
+            {fieldErrors.paidOn ? <p className="mt-1.5 text-xs text-[var(--neon-pink)]">{fieldErrors.paidOn}</p> : null}
+          </SheetSection>
+        ) : (
+          <SheetSection label="Paying each in full" error={fieldErrors.amountCents || fieldErrors.payments}>
+            <ul className="divide-y divide-[var(--flat-border)] rounded-2xl border border-[var(--flat-border)] bg-white/[0.03] px-3.5">
+              {targets.map((t) => (
+                <li key={t.lineId} className="flex items-center gap-3 py-2.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-white">{t.workerName}</span>
+                    {t.event ? <span className="block truncate text-xs text-[var(--flat-text-faint)]">{t.event}</span> : null}
+                  </span>
+                  <span className="shrink-0 text-sm font-bold tabular-nums text-white">{formatCents(t.remainingCents)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-xs text-[var(--flat-text-faint)]">Paid on</span>
+              <DateChip
+                value={paidOn}
+                label={friendlyDate(paidOn, today)}
+                min="2025-01-01"
+                max={today}
+                onChange={(v) => {
+                  setPaidOn(v);
+                  touch();
+                }}
+                ariaLabel="Date paid"
+                className="rounded-2xl border border-[var(--flat-border)] bg-white/[0.03] px-3 py-3"
+              />
+            </div>
+            {fieldErrors.paidOn ? <p className="mt-1.5 text-xs text-[var(--neon-pink)]">{fieldErrors.paidOn}</p> : null}
+          </SheetSection>
+        )}
 
         <SheetSection label="Paid with">
           <div className="grid grid-cols-2 gap-2">
