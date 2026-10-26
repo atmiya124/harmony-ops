@@ -10,7 +10,7 @@ import { useQuickPay } from '@/components/labour/useQuickPay';
 import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import ErrorState from '@/components/ui/ErrorState';
 import { useCachedData } from '@/hooks/useCachedData';
-import { CREW_KEY, CREW_ONE_OFFS_KEY, getCrewMember, getUnpaidOneOffs, listCrew, type CrewMemberDto } from '@/lib/financeApi';
+import { CREW_KEY, CREW_ONE_OFFS_KEY, getCrewMember, getUnpaidOneOffs, listCrew, type CrewMemberDto, type CrewWorkDto } from '@/lib/financeApi';
 import { formatCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 
@@ -26,7 +26,7 @@ export default function CrewList() {
   const [query, setQuery] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [adding, setAdding] = useState(false);
-  const { pay, busyKey } = useQuickPay();
+  const { pay, unpay, busyKey, quickPaid, quickPaidRows } = useQuickPay();
   const today = todayLocal();
 
   const inactiveCount = (crew ?? []).filter((c) => !c.active).length;
@@ -39,10 +39,13 @@ export default function CrewList() {
         return words.every((w) => haystack.includes(w));
       });
   }, [crew, query, showInactive]);
-  const shownOneOffs = useMemo(() => {
-    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return showInactive ? [] : oneOffs.filter((w) => words.every((word) => `${w.workerName} ${w.booking?.title ?? ''}`.toLowerCase().includes(word)));
-  }, [oneOffs, query, showInactive]);
+  // One-offs paid with a tap stay listed (green, undoable) until the app is
+  // reopened, though they're no longer owed.
+  const paidOneOffs = quickPaidRows<CrewWorkDto>().filter((r) => !oneOffs.some((w) => w.lineId === r.lineId));
+  const oneOffWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shownOneOffs = showInactive
+    ? []
+    : [...oneOffs, ...paidOneOffs].filter((w) => oneOffWords.every((word) => `${w.workerName} ${w.booking?.title ?? ''}`.toLowerCase().includes(word)));
   // Everyone still owed: crew on the list and one-off people alike.
   const owedTotal = (crew ?? []).reduce((s, c) => s + c.totals.remainingCents, 0) + oneOffs.reduce((s, w) => s + w.remainingCents, 0);
 
@@ -99,7 +102,9 @@ export default function CrewList() {
               member={c}
               busy={busyKey === c.id}
               disabled={busyKey !== null}
-              onPaid={() => pay(c.id, c.name, async () => (await getCrewMember(c.id)).work)}
+              quickPaidCents={quickPaid(c.id)?.amountCents ?? null}
+              onPay={() => pay(c.id, c.name, async () => (await getCrewMember(c.id)).work)}
+              onUnpay={() => unpay(c.id, c.name)}
             />
           ))}
         </ul>
@@ -110,7 +115,9 @@ export default function CrewList() {
         <section>
           <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--flat-text-faint)]">One-off · not on the crew list</p>
           <ul className="divide-y divide-[var(--flat-border)] rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] px-4">
-            {shownOneOffs.map((w) => (
+            {shownOneOffs.map((w) => {
+              const paid = quickPaid(w.lineId);
+              return (
               <li key={w.lineId} className="flex items-center gap-2">
                 <Link href={`/expenses/${w.labourExpenseId}?from=/finances/crew`} className="flex min-w-0 flex-1 items-center gap-3 py-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-sm font-bold text-white">{w.workerName.charAt(0).toUpperCase()}</span>
@@ -120,14 +127,19 @@ export default function CrewList() {
                       {[w.booking?.title ?? 'Deleted event', friendlyDate(w.workedOn, today)].join(' · ')}
                     </span>
                   </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block text-[15px] font-bold tabular-nums text-[var(--neon-orange)]">{formatCents(w.remainingCents)}</span>
-                    <span className="block text-[11px] text-[var(--flat-text-faint)]">owed</span>
-                  </span>
+                  <AmountState cents={paid ? paid.amountCents : w.remainingCents} paid={!!paid} />
                 </Link>
-                <PaidButton busy={busyKey === w.lineId} disabled={busyKey !== null} onClick={() => pay(w.lineId, w.workerName, [w])} label={`Mark ${w.workerName} paid ${formatCents(w.remainingCents)}`} />
+                <PaidButton
+                  paid={!!paid}
+                  busy={busyKey === w.lineId}
+                  disabled={busyKey !== null}
+                  onPay={() => pay(w.lineId, w.workerName, [w], w)}
+                  onUnpay={() => unpay(w.lineId, w.workerName)}
+                  name={w.workerName}
+                />
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       ) : null}
@@ -151,7 +163,32 @@ export default function CrewList() {
   );
 }
 
-function CrewRow({ member: c, busy, disabled, onPaid }: { member: CrewMemberDto; busy: boolean; disabled: boolean; onPaid: () => void }) {
+// What a row owes (orange) or, once paid with a tap, what was paid (green).
+function AmountState({ cents, paid }: { cents: number; paid: boolean }) {
+  return (
+    <span className="shrink-0 text-right">
+      <span className={`block text-[15px] font-bold tabular-nums ${paid ? 'text-[var(--neon-green)]' : 'text-[var(--neon-orange)]'}`}>{formatCents(cents)}</span>
+      <span className="block text-[11px] text-[var(--flat-text-faint)]">{paid ? 'paid' : 'owed'}</span>
+    </span>
+  );
+}
+
+function CrewRow({
+  member: c,
+  busy,
+  disabled,
+  quickPaidCents,
+  onPay,
+  onUnpay,
+}: {
+  member: CrewMemberDto;
+  busy: boolean;
+  disabled: boolean;
+  quickPaidCents: number | null; // paid with a tap this session
+  onPay: () => void;
+  onUnpay: () => void;
+}) {
+  const paid = quickPaidCents !== null;
   const details = [c.role, c.phone ?? c.email, c.defaultRateCents !== null ? `${formatCents(c.defaultRateCents)}/h` : null].filter(Boolean).join(' · ');
   return (
     <li className="flex items-center gap-2">
@@ -161,16 +198,13 @@ function CrewRow({ member: c, busy, disabled, onPaid }: { member: CrewMemberDto;
           <span className="block truncate text-[15px] font-bold text-white">{c.name}</span>
           {details ? <span className="mt-0.5 block truncate text-xs text-[var(--flat-text-faint)]">{details}</span> : null}
         </span>
-        {c.totals.remainingCents > 0 ? (
-          <span className="shrink-0 text-right">
-            <span className="block text-[15px] font-bold tabular-nums text-[var(--neon-orange)]">{formatCents(c.totals.remainingCents)}</span>
-            <span className="block text-[11px] text-[var(--flat-text-faint)]">owed</span>
-          </span>
+        {paid || c.totals.remainingCents > 0 ? (
+          <AmountState cents={paid ? quickPaidCents : c.totals.remainingCents} paid={paid} />
         ) : (
           <ChevronRight size={16} className="shrink-0 text-white/30" />
         )}
       </Link>
-      {c.totals.remainingCents > 0 ? <PaidButton busy={busy} disabled={disabled} onClick={onPaid} label={`Mark ${c.name} paid ${formatCents(c.totals.remainingCents)}`} /> : null}
+      {paid || c.totals.remainingCents > 0 ? <PaidButton paid={paid} busy={busy} disabled={disabled} onPay={onPay} onUnpay={onUnpay} name={c.name} /> : null}
     </li>
   );
 }

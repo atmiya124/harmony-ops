@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, ChevronRight, Mail, NotebookText, Phone } from 'lucide-react';
+import { Building2, Mail, NotebookText, Phone } from 'lucide-react';
 import { PayStatusPill } from '@/components/labour/LabourDetails';
 import PaidButton from '@/components/labour/PaidButton';
 import { useQuickPay } from '@/components/labour/useQuickPay';
 import ErrorState from '@/components/ui/ErrorState';
-import type { CrewMemberDetailDto } from '@/lib/financeApi';
+import { getLabour, type CrewMemberDetailDto } from '@/lib/financeApi';
 import { formatCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 import { formatHours } from '@/lib/finance/labour';
@@ -17,7 +17,7 @@ import { formatHours } from '@/lib/finance/labour';
 // today's default. Paid on an owed event settles it in one tap (with Undo).
 export default function CrewProfile({ member, error }: { member: CrewMemberDetailDto | undefined; error: string | null }) {
   const today = todayLocal();
-  const { pay, busyKey } = useQuickPay();
+  const { pay, unpay, busyKey } = useQuickPay();
   if (error && !member) return <ErrorState message={error} />;
   if (!member) return <div className="h-40 animate-pulse rounded-3xl bg-white/[0.03]" aria-busy="true" />;
   const t = member.totals;
@@ -84,20 +84,23 @@ export default function CrewProfile({ member, error }: { member: CrewMemberDetai
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block text-[15px] font-bold tabular-nums text-white">{formatCents(w.earnedCents)}</span>
-                    <span className="mt-1 block">
-                      <PayStatusPill state={w} />
-                    </span>
+                    {/* The Paid toggle says paid; the pill shows owed or how much is paid. */}
+                    {w.status === 'paid' ? null : (
+                      <span className="mt-1 block">
+                        <PayStatusPill state={w} />
+                      </span>
+                    )}
                   </span>
-                  {w.remainingCents > 0 ? null : <ChevronRight size={16} className="shrink-0 text-white/30" />}
                 </Link>
-                {w.remainingCents > 0 ? (
-                  <PaidButton
-                    busy={busyKey === w.lineId}
-                    disabled={busyKey !== null}
-                    onClick={() => pay(w.lineId, member.name, [w])}
-                    label={`Mark ${w.booking?.title ?? 'event'} paid ${formatCents(w.remainingCents)}`}
-                  />
-                ) : null}
+                <PaidButton
+                  paid={w.status === 'paid'}
+                  busy={busyKey === w.lineId}
+                  disabled={busyKey !== null}
+                  onPay={() => pay(w.lineId, member.name, [w])}
+                  // Paid some other way: undo removes that event's payments to them.
+                  onUnpay={() => unpay(w.lineId, member.name, async () => (await getLabour(w.labourExpenseId)).lines.find((l) => l.id === w.lineId)?.payments.map((p) => p.id) ?? [])}
+                  name={`${member.name} for ${w.booking?.title ?? 'this event'}`}
+                />
               </li>
             ))}
           </ul>

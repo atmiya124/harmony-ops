@@ -44,7 +44,7 @@ export default function LabourDetails({ expense }: { expense: ExpenseDetailDto }
   const { data: labour, error } = useCachedData(labourKey(expense.id), () => getLabour(expense.id), version);
   const partners = useCachedData(FINANCE_PARTNERS_KEY, getPartners).data?.partners ?? [];
   const [paying, setPaying] = useState<LabourLineDto | null>(null);
-  const { pay, busyKey } = useQuickPay();
+  const { pay, unpay, busyKey } = useQuickPay();
   const today = todayLocal();
   const nameFor = (email: string) => partnerLabel(partners.find((p) => p.email === email) ?? { email, name: null });
 
@@ -130,20 +130,29 @@ export default function LabourDetails({ expense }: { expense: ExpenseDetailDto }
               </ul>
             ) : null}
 
-            {l.remainingCents > 0 && !labour.deletedAt ? (
+            {l.earnedCents > 0 && !labour.deletedAt ? (
               <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-3">
-                <span className="text-[13px] text-white/45">
-                  <span className="font-semibold tabular-nums text-[var(--neon-orange)]">{formatCents(l.remainingCents)}</span> owed
-                </span>
+                {l.remainingCents > 0 ? (
+                  <span className="text-[13px] text-white/45">
+                    <span className="font-semibold tabular-nums text-[var(--neon-orange)]">{formatCents(l.remainingCents)}</span> owed
+                  </span>
+                ) : (
+                  <span className="text-[13px] text-white/45">Fully paid</span>
+                )}
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setPaying(l)} className="flex items-center gap-1 rounded-full px-2 py-2 text-white/70">
-                    <Plus size={14} /> <span className="text-[13px] font-semibold">Other amount</span>
-                  </button>
+                  {l.remainingCents > 0 ? (
+                    <button type="button" onClick={() => setPaying(l)} className="flex items-center gap-1 rounded-full px-2 py-2 text-white/70">
+                      <Plus size={14} /> <span className="text-[13px] font-semibold">Other amount</span>
+                    </button>
+                  ) : null}
                   <PaidButton
+                    paid={l.status === 'paid'}
                     busy={busyKey === l.id}
                     disabled={busyKey !== null}
-                    onClick={() => pay(l.id, l.workerName, [{ lineId: l.id, remainingCents: l.remainingCents }])}
-                    label={`Mark ${l.workerName} paid ${formatCents(l.remainingCents)}`}
+                    onPay={() => pay(l.id, l.workerName, [{ lineId: l.id, remainingCents: l.remainingCents }])}
+                    // Undo removes this person's payments for the event.
+                    onUnpay={() => unpay(l.id, l.workerName, async () => l.payments.map((p) => p.id))}
+                    name={l.workerName}
                   />
                 </div>
               </div>

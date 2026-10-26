@@ -39,14 +39,38 @@ export function rememberCrewPayHow(how: How) {
   }
 }
 
+// Rows paid with one tap since the app was opened, by row key, so a row
+// stays green (and can be undone) after the lists refetch — even a one-off
+// person who otherwise drops off the "still owed" list.
+export interface QuickPaid<T = unknown> {
+  paymentIds: string[];
+  amountCents: number;
+  row?: T; // the row as it was before paying, to keep showing it
+}
+const paidThisSession = new Map<string, QuickPaid>();
+
 export function useQuickPay() {
   const { notifyChanged, showToast } = useExpenseEntry();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [, setPaidVersion] = useState(0);
+  const bump = () => setPaidVersion((v) => v + 1);
 
-  // `key` marks which row is busy; `lines` are what that row owes (or a
-  // loader for them, e.g. a crew member's events).
+  const removePayments = useCallback(
+    async (key: string, paymentIds: string[]) => {
+      for (const id of paymentIds) await deleteExpense(id);
+      paidThisSession.delete(key);
+      // The same payments may be remembered under another screen's row key.
+      for (const [k, v] of paidThisSession) if (v.paymentIds.some((id) => paymentIds.includes(id))) paidThisSession.delete(k);
+      bump();
+      notifyChanged();
+    },
+    [notifyChanged],
+  );
+
+  // `key` marks the row; `lines` are what that row owes (or a loader for
+  // them, e.g. a crew member's events). `row` is kept to show it as paid.
   const pay = useCallback(
-    async (key: string, name: string, lines: PayLine[] | (() => Promise<PayLine[]>)) => {
+    async (key: string, name: string, lines: PayLine[] | (() => Promise<PayLine[]>), row?: unknown) => {
       setBusyKey(key);
       try {
         const owed = (typeof lines === 'function' ? await lines() : lines).filter((l) => l.remainingCents > 0);
@@ -62,14 +86,14 @@ export function useQuickPay() {
           reference: null,
           notes: null,
         });
+        const paymentIds = payments.map((p) => p.id);
+        paidThisSession.set(key, { paymentIds, amountCents, row });
+        bump();
         notifyChanged();
         showToast({
           message: `Paid ${name} ${formatCents(amountCents)} · ${PAYMENT_METHOD_LABELS[how.paymentMethod]}${how.fundingSource === 'personal' ? ' (yours)' : ''}`,
           actionLabel: 'Undo',
-          onAction: async () => {
-            for (const p of payments) await deleteExpense(p.id);
-            notifyChanged();
-          },
+          onAction: () => removePayments(key, paymentIds),
         });
       } catch (err) {
         showToast({ message: err instanceof Error ? err.message : 'Could not record the payment' });
@@ -77,8 +101,30 @@ export function useQuickPay() {
         setBusyKey(null);
       }
     },
-    [notifyChanged, showToast],
+    [notifyChanged, showToast, removePayments],
   );
 
-  return { pay, busyKey };
+  // Back to owed: removes the one-tap payments for this row, or — for a row
+  // paid some other way — the payments `loadIds` finds.
+  const unpay = useCallback(
+    async (key: string, name: string, loadIds?: () => Promise<string[]>) => {
+      setBusyKey(key);
+      try {
+        const ids = paidThisSession.get(key)?.paymentIds ?? (loadIds ? await loadIds() : []);
+        if (ids.length === 0) return;
+        await removePayments(key, ids);
+        showToast({ message: `Marked ${name} unpaid` });
+      } catch (err) {
+        showToast({ message: err instanceof Error ? err.message : 'Could not remove the payment' });
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [showToast, removePayments],
+  );
+
+  const quickPaid = useCallback((key: string) => paidThisSession.get(key), []);
+  const quickPaidRows = useCallback(<T,>(): T[] => [...paidThisSession.values()].map((p) => p.row as T).filter(Boolean), []);
+
+  return { pay, unpay, busyKey, quickPaid, quickPaidRows };
 }
