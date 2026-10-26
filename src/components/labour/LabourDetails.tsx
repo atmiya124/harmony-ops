@@ -3,22 +3,24 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Plus, Users } from 'lucide-react';
-import LabourPaymentSheet, { type PayTarget } from './LabourPaymentSheet';
+import LabourPaymentSheet from './LabourPaymentSheet';
+import PaidButton from './PaidButton';
+import { useQuickPay } from './useQuickPay';
 import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import { partnerLabel } from '@/components/expenses/partnerLabel';
 import ErrorState from '@/components/ui/ErrorState';
 import { colorAlpha } from '@/lib/colorAlpha';
 import { useCachedData } from '@/hooks/useCachedData';
-import { FINANCE_PARTNERS_KEY, getLabour, getPartners, labourKey, type ExpenseDetailDto } from '@/lib/financeApi';
+import { FINANCE_PARTNERS_KEY, getLabour, getPartners, labourKey, type ExpenseDetailDto, type LabourLineDto } from '@/lib/financeApi';
 import { formatCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 import { formatHours, LABOUR_PAY_STATUS_LABELS, labourSummaryLabel, paidPercent, type LabourPayState, type LabourPayStatus } from '@/lib/finance/labour';
 import { PAYMENT_METHOD_LABELS } from '@/lib/finance/types';
 
 // An event's crew labour: each person's hours and rate, what they earned,
-// what they've been paid and what's still owed — Record payment for one, or
-// Pay everyone owed in one go. This is where crew detail belongs; Finance
-// lists only show the total.
+// what they've been paid and what's still owed — Paid (in full, one tap) or
+// Record payment for another amount. This
+// is where crew detail belongs; Finance lists only show the total.
 
 export const PAY_STATUS_COLOR: Record<LabourPayStatus, string> = {
   unpaid: 'var(--neon-orange)',
@@ -41,14 +43,14 @@ export default function LabourDetails({ expense }: { expense: ExpenseDetailDto }
   const { version, notifyChanged, showToast } = useExpenseEntry();
   const { data: labour, error } = useCachedData(labourKey(expense.id), () => getLabour(expense.id), version);
   const partners = useCachedData(FINANCE_PARTNERS_KEY, getPartners).data?.partners ?? [];
-  const [paying, setPaying] = useState<PayTarget[] | null>(null);
+  const [paying, setPaying] = useState<LabourLineDto | null>(null);
+  const { pay, busyKey } = useQuickPay();
   const today = todayLocal();
   const nameFor = (email: string) => partnerLabel(partners.find((p) => p.email === email) ?? { email, name: null });
 
   if (error && !labour) return <ErrorState message={error} />;
   if (!labour) return <div className="h-40 animate-pulse rounded-3xl bg-white/[0.03]" aria-busy="true" />;
   const t = labour.totals;
-  const owed = labour.deletedAt ? [] : labour.lines.filter((l) => l.remainingCents > 0);
 
   return (
     <div className="space-y-4 pb-2">
@@ -85,18 +87,6 @@ export default function LabourDetails({ expense }: { expense: ExpenseDetailDto }
           <Figure label="Paid" cents={t.paidCents} />
           <Figure label="Owed" cents={t.remainingCents} tone={t.remainingCents > 0 ? 'var(--neon-orange)' : undefined} />
         </dl>
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-4">
-          <PayStatusPill state={t} />
-          {owed.length > 1 ? (
-            <button
-              type="button"
-              onClick={() => setPaying(owed.map((l) => ({ lineId: l.id, workerName: l.workerName, remainingCents: l.remainingCents })))}
-              className="flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[#0a0a0a] active:scale-[0.97]"
-            >
-              <span className="text-[13px] font-bold">Pay everyone · {formatCents(t.remainingCents)}</span>
-            </button>
-          ) : null}
-        </div>
       </section>
 
       <ul className="space-y-3">
@@ -145,13 +135,17 @@ export default function LabourDetails({ expense }: { expense: ExpenseDetailDto }
                 <span className="text-[13px] text-white/45">
                   <span className="font-semibold tabular-nums text-[var(--neon-orange)]">{formatCents(l.remainingCents)}</span> owed
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setPaying([{ lineId: l.id, workerName: l.workerName, remainingCents: l.remainingCents }])}
-                  className="flex items-center gap-1.5 rounded-full border border-white/[0.16] px-3.5 py-2 text-white"
-                >
-                  <Plus size={14} /> <span className="text-[13px] font-semibold">Record payment</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setPaying(l)} className="flex items-center gap-1 rounded-full px-2 py-2 text-white/70">
+                    <Plus size={14} /> <span className="text-[13px] font-semibold">Other amount</span>
+                  </button>
+                  <PaidButton
+                    busy={busyKey === l.id}
+                    disabled={busyKey !== null}
+                    onClick={() => pay(l.id, l.workerName, [{ lineId: l.id, remainingCents: l.remainingCents }])}
+                    label={`Mark ${l.workerName} paid ${formatCents(l.remainingCents)}`}
+                  />
+                </div>
               </div>
             ) : null}
           </li>
@@ -160,12 +154,12 @@ export default function LabourDetails({ expense }: { expense: ExpenseDetailDto }
 
       {paying ? (
         <LabourPaymentSheet
-          targets={paying}
+          line={paying}
           onClose={() => setPaying(null)}
-          onSaved={(amountCents, count) => {
+          onSaved={(_labour, amountCents) => {
             setPaying(null);
             notifyChanged();
-            showToast({ message: `Recorded ${formatCents(amountCents)} to ${count === 1 ? paying[0].workerName : `${count} people`}` });
+            showToast({ message: `Recorded ${formatCents(amountCents)} to ${paying.workerName}` });
           }}
         />
       ) : null}

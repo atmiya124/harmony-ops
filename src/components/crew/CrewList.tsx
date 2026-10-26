@@ -5,15 +5,18 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Plus, Search, Users } from 'lucide-react';
 import CrewFormSheet from './CrewFormSheet';
+import PaidButton from '@/components/labour/PaidButton';
+import { useQuickPay } from '@/components/labour/useQuickPay';
 import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import ErrorState from '@/components/ui/ErrorState';
 import { useCachedData } from '@/hooks/useCachedData';
-import { CREW_KEY, CREW_ONE_OFFS_KEY, getUnpaidOneOffs, listCrew, type CrewMemberDto } from '@/lib/financeApi';
+import { CREW_KEY, CREW_ONE_OFFS_KEY, getCrewMember, getUnpaidOneOffs, listCrew, type CrewMemberDto } from '@/lib/financeApi';
 import { formatCents } from '@/lib/money';
 import { friendlyDate, todayLocal } from '@/lib/finance/dates';
 
 // The crew / contractor directory: who they are, their usual rate, and
-// whether they're still owed anything. A row opens their profile.
+// whether they're still owed anything. A row opens their profile; Paid on
+// an owed row settles it in one tap (with Undo).
 export default function CrewList() {
   const router = useRouter();
   const { version, notifyChanged } = useExpenseEntry();
@@ -23,6 +26,7 @@ export default function CrewList() {
   const [query, setQuery] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [adding, setAdding] = useState(false);
+  const { pay, busyKey } = useQuickPay();
   const today = todayLocal();
 
   const inactiveCount = (crew ?? []).filter((c) => !c.active).length;
@@ -90,7 +94,13 @@ export default function CrewList() {
       ) : (
         <ul className="divide-y divide-[var(--flat-border)] rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] px-4">
           {shown.map((c) => (
-            <CrewRow key={c.id} member={c} />
+            <CrewRow
+              key={c.id}
+              member={c}
+              busy={busyKey === c.id}
+              disabled={busyKey !== null}
+              onPaid={() => pay(c.id, c.name, async () => (await getCrewMember(c.id)).work)}
+            />
           ))}
         </ul>
       )}
@@ -101,8 +111,8 @@ export default function CrewList() {
           <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--flat-text-faint)]">One-off · not on the crew list</p>
           <ul className="divide-y divide-[var(--flat-border)] rounded-3xl border border-[var(--flat-border)] bg-[var(--flat-surface)] px-4">
             {shownOneOffs.map((w) => (
-              <li key={w.lineId}>
-                <Link href={`/expenses/${w.labourExpenseId}?from=/finances/crew`} className="flex items-center gap-3 py-3">
+              <li key={w.lineId} className="flex items-center gap-2">
+                <Link href={`/expenses/${w.labourExpenseId}?from=/finances/crew`} className="flex min-w-0 flex-1 items-center gap-3 py-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-sm font-bold text-white">{w.workerName.charAt(0).toUpperCase()}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-bold text-white">{w.workerName}</span>
@@ -114,8 +124,8 @@ export default function CrewList() {
                     <span className="block text-[15px] font-bold tabular-nums text-[var(--neon-orange)]">{formatCents(w.remainingCents)}</span>
                     <span className="block text-[11px] text-[var(--flat-text-faint)]">owed</span>
                   </span>
-                  <ChevronRight size={16} className="shrink-0 text-white/30" />
                 </Link>
+                <PaidButton busy={busyKey === w.lineId} disabled={busyKey !== null} onClick={() => pay(w.lineId, w.workerName, [w])} label={`Mark ${w.workerName} paid ${formatCents(w.remainingCents)}`} />
               </li>
             ))}
           </ul>
@@ -141,11 +151,11 @@ export default function CrewList() {
   );
 }
 
-function CrewRow({ member: c }: { member: CrewMemberDto }) {
+function CrewRow({ member: c, busy, disabled, onPaid }: { member: CrewMemberDto; busy: boolean; disabled: boolean; onPaid: () => void }) {
   const details = [c.role, c.phone ?? c.email, c.defaultRateCents !== null ? `${formatCents(c.defaultRateCents)}/h` : null].filter(Boolean).join(' · ');
   return (
-    <li>
-      <Link href={`/finances/crew/${c.id}`} className="flex items-center gap-3 py-3">
+    <li className="flex items-center gap-2">
+      <Link href={`/finances/crew/${c.id}`} className="flex min-w-0 flex-1 items-center gap-3 py-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-sm font-bold text-white">{c.name.charAt(0).toUpperCase()}</span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-bold text-white">{c.name}</span>
@@ -156,9 +166,11 @@ function CrewRow({ member: c }: { member: CrewMemberDto }) {
             <span className="block text-[15px] font-bold tabular-nums text-[var(--neon-orange)]">{formatCents(c.totals.remainingCents)}</span>
             <span className="block text-[11px] text-[var(--flat-text-faint)]">owed</span>
           </span>
-        ) : null}
-        <ChevronRight size={16} className="shrink-0 text-white/30" />
+        ) : (
+          <ChevronRight size={16} className="shrink-0 text-white/30" />
+        )}
       </Link>
+      {c.totals.remainingCents > 0 ? <PaidButton busy={busy} disabled={disabled} onClick={onPaid} label={`Mark ${c.name} paid ${formatCents(c.totals.remainingCents)}`} /> : null}
     </li>
   );
 }
