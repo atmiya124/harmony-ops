@@ -114,15 +114,15 @@ export default function NewBookingForm({ initial, isEdit, onCancel, onSave, onAi
         {step === 2 && (
           <>
             <StepHeader title="Event Schedule" sub="Set up your event timeline" />
-            <Field label="Event Date" value={form.eventDate} onChange={(v) => set('eventDate', v)} placeholder="2026-10-05" />
+            <Field label="Event Date" type="date" value={form.eventDate} onChange={(v) => set('eventDate', v)} />
             <div className="grid grid-cols-3 gap-2">
-              <Field label="Setup" value={form.setupTime} onChange={(v) => set('setupTime', v)} placeholder="09:00" />
-              <Field label="Start" value={form.startTime} onChange={(v) => set('startTime', v)} placeholder="18:00" />
-              <Field label="End" value={form.endTime} onChange={(v) => set('endTime', v)} placeholder="22:00" />
+              <Field label="Setup" type="time" value={form.setupTime} onChange={(v) => set('setupTime', v)} />
+              <Field label="Start" type="time" value={form.startTime} onChange={(v) => set('startTime', v)} />
+              <Field label="End" type="time" value={form.endTime} onChange={(v) => set('endTime', v)} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Pickup Date" value={form.pickupDate} onChange={(v) => set('pickupDate', v)} placeholder="2026-10-06" />
-              <Field label="Pickup Time" value={form.pickupTime} onChange={(v) => set('pickupTime', v)} placeholder="10:00" />
+              <Field label="Pickup Date" type="date" value={form.pickupDate} onChange={(v) => set('pickupDate', v)} />
+              <Field label="Pickup Time" type="time" value={form.pickupTime} onChange={(v) => set('pickupTime', v)} />
             </div>
           </>
         )}
@@ -329,15 +329,29 @@ function StepHeader({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+// Date and time fields are native inputs, so phones open their own picker on
+// tap; a desktop click also calls showPicker() (see DateChip).
+function Field({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: 'text' | 'date' | 'time' }) {
+  const picker = type !== 'text';
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1.5 block text-xs text-[var(--flat-text-dim)]">{label}</span>
       <input
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => {
+          if (!picker || !window.matchMedia('(pointer: fine)').matches) return;
+          try {
+            e.currentTarget.showPicker();
+          } catch {
+            // Already open, or unsupported.
+          }
+        }}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-[var(--flat-border)] bg-[var(--flat-surface-input)] px-3 py-2.5 text-sm text-white outline-none placeholder:text-[var(--flat-text-faint)]"
+        // 16px on phones stops iOS zooming the page when the input takes focus.
+        className="min-h-[42px] w-full min-w-0 appearance-none rounded-lg border border-[var(--flat-border)] bg-[var(--flat-surface-input)] px-3 py-2.5 text-[16px] text-white outline-none placeholder:text-[var(--flat-text-faint)] md:text-sm"
+        style={picker ? { colorScheme: 'dark' } : undefined}
       />
     </label>
   );
