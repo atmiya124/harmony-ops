@@ -227,6 +227,7 @@ p { margin: 0; }
 .badge.paid { border-color: var(--paid); color: var(--paid); }
 .badge.void { border-color: var(--ink-3); color: var(--ink-3); }
 .badge-note { font-size: 8.4px; color: var(--ink-3); }
+.paid-stamp { flex: 0 0 auto; width: 64px; height: 64px; margin: 0 2px; }
 .authorized { margin-top: auto; padding-top: 26px; }
 .authorized .sign-line { height: 22px; }
 .authorized .for { font-size: 8px; color: var(--ink-3); margin: 5px 0 0 62px; }

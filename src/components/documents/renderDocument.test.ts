@@ -156,3 +156,13 @@ test('an accepted quote is signed for the company by its creator, dated the day 
   const blank = markup(renderDocumentHtml(quoteDocument(quote, SAMPLE_CONFIG)));
   assert.ok(!blank.includes('Atmiya Patel'));
 });
+
+test('a paid invoice carries the PAID stamp in place of the badge; an unpaid one doesn’t', () => {
+  const q = quoteFixture();
+  const paid = renderDocumentHtml(invoiceDocument(invoiceFixture(q, { amountPaidCents: q.totalCents - q.depositRequiredCents }, { status: 'paid' }), SAMPLE_CONFIG));
+  assert.match(paid, /<img class="paid-stamp" src="data:image\/svg\+xml;base64,[^"]+"[^>]*alt="Paid"/);
+  assert.doesNotMatch(paid, /class="badge paid"/);
+  const unpaid = renderDocumentHtml(invoiceDocument(invoiceFixture(), SAMPLE_CONFIG));
+  assert.doesNotMatch(unpaid, /<img class="paid-stamp"/);
+  assert.match(unpaid, /class="badge due"/);
+});

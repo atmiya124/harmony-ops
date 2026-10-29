@@ -19,6 +19,8 @@ import { MAX_CREW_ROLE, MAX_LABOUR_MINUTES, MAX_WORKER_NAME } from '../finance/l
 import {
   ADJUSTMENT_TYPES,
   DOCUMENT_SEQUENCES,
+  INVOICE_PAYMENT_KINDS,
+  INVOICE_PAYMENT_METHODS,
   INVOICE_STATUSES,
   MAX_ITEM_QUANTITY,
   MAX_PERCENT_BP,
@@ -544,6 +546,9 @@ export const quotes = sqliteTable(
 
     quoteDate: text('quote_date').notNull(), // YYYY-MM-DD
     validUntil: text('valid_until').notNull(), // YYYY-MM-DD
+    // The client's purchase order number, for clients whose accounts team
+    // needs one to pay. Optional; printed only when set.
+    clientPoNumber: text('client_po_number'),
 
     currency: text('currency').notNull().default(CURRENCY),
     subtotalCents: integer('subtotal_cents').notNull(),
@@ -670,6 +675,7 @@ export const invoices = sqliteTable(
 
     invoiceDate: text('invoice_date').notNull(),
     dueDate: text('due_date').notNull(),
+    clientPoNumber: text('client_po_number'), // copied from the quote; can be added later
 
     currency: text('currency').notNull().default(CURRENCY),
     subtotalCents: integer('subtotal_cents').notNull(),
@@ -902,6 +908,45 @@ export const quoteEmailSends = sqliteTable(
   ],
 );
 
+// Money received against an invoice (Phase 5). New table. The invoice's
+// deposit_paid_cents / amount_paid_cents / balance_due_cents are kept equal
+// to the sum of its live rows here, in the same transaction as every
+// change. A mistaken payment is undone by voiding it (never deleted), so
+// the history stays. A receipt email is sent only when staff ask for one;
+// the last one sent is noted on the row.
+export const invoicePayments = sqliteTable(
+  'invoice_payments',
+  {
+    id: text('id').primaryKey(), // from the browser, so a retried save records it once
+    invoiceId: text('invoice_id')
+      .notNull()
+      .references(() => invoices.id),
+    kind: text('kind', { enum: INVOICE_PAYMENT_KINDS }).notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    // App-checked (see INVOICE_PAYMENT_METHODS) so methods can be added.
+    method: text('method', { enum: INVOICE_PAYMENT_METHODS }),
+    receivedOn: text('received_on').notNull(), // YYYY-MM-DD, Toronto
+    reference: text('reference'), // e.g. the e-transfer reference, or a note
+    recordedByUserId: text('recorded_by_user_id').notNull(),
+    recordedByEmail: text('recorded_by_email').notNull(),
+    createdAt: text('created_at').notNull(),
+    voidedAt: text('voided_at'),
+    voidedByEmail: text('voided_by_email'),
+    voidReason: text('void_reason'),
+    receiptSentAt: text('receipt_sent_at'),
+    receiptSentTo: text('receipt_sent_to'),
+  },
+  (t) => [
+    index('invoice_payments_invoice_id_idx').on(t.invoiceId),
+    index('invoice_payments_received_on_idx').on(t.receivedOn),
+    check('invoice_payments_kind_valid', sql`${t.kind} IN (${inList(INVOICE_PAYMENT_KINDS)})`),
+    check('invoice_payments_amount_range', sql`${t.amountCents} > 0 AND ${t.amountCents} <= ${sql.raw(String(MAX_AMOUNT_CENTS))}`),
+    check('invoice_payments_received_on_format', isoDate(t.receivedOn)),
+    check('invoice_payments_reference_length', sql`${t.reference} IS NULL OR length(${t.reference}) <= 200`),
+    check('invoice_payments_void_complete', sql`(${t.voidedAt} IS NULL) = (${t.voidedByEmail} IS NULL)`),
+  ],
+);
+
 // The price list the quote builder picks items from. New table. Picking an
 // item copies its name, description and price into the quote line, so
 // editing or deleting an item here never changes a saved quote.
@@ -948,6 +993,7 @@ export type QuoteRow = typeof quotes.$inferSelect;
 export type QuoteItemRow = typeof quoteItems.$inferSelect;
 export type InvoiceRow = typeof invoices.$inferSelect;
 export type InvoiceItemRow = typeof invoiceItems.$inferSelect;
+export type InvoicePaymentRow = typeof invoicePayments.$inferSelect;
 export type QuoteAccessLinkRow = typeof quoteAccessLinks.$inferSelect;
 export type QuoteAcceptanceRow = typeof quoteAcceptances.$inferSelect;
 export type QuoteEmailSendRow = typeof quoteEmailSends.$inferSelect;

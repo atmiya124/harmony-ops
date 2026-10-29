@@ -34,6 +34,10 @@ const ATTRIBUTE_NAMES: Record<string, string> = {
   strokeWidth: 'stroke-width',
   strokeLinecap: 'stroke-linecap',
   strokeLinejoin: 'stroke-linejoin',
+  textAnchor: 'text-anchor',
+  fontSize: 'font-size',
+  fontWeight: 'font-weight',
+  letterSpacing: 'letter-spacing',
 };
 
 const VOID_ELEMENTS = new Set(['br', 'hr', 'img', 'input', 'meta', 'link']);

@@ -14,6 +14,7 @@
     "db:apply": "tsx --env-file=.env src/lib/db/applyMigration.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "db:backup": "tsx --env-file=.env src/lib/db/backup.ts",
+    "db:backfill-deposits": "tsx --env-file=.env src/lib/db/backfillDepositPayments.ts",
     "storage:check": "tsx --env-file=.env src/lib/storage/checkBlob.ts"
   },
   "dependencies": {

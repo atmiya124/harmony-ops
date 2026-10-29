@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { PAID_STAMP_SRC } from '@/lib/documents/paidStamp';
 import { AlertTriangle, Download, FileText } from 'lucide-react';
-import { INVOICE_STATUS_LABELS, QUOTE_STATUS_LABELS, type InvoiceStatus, type QuoteStatus } from '@/lib/sales/types';
+import { INVOICE_PAYMENT_METHOD_LABELS, INVOICE_PAYMENT_METHODS, INVOICE_STATUS_LABELS, QUOTE_STATUS_LABELS, type InvoicePaymentMethod, type InvoiceStatus, type QuoteStatus } from '@/lib/sales/types';
 
 // Building blocks for the light Quotes & Invoices screens. Colours come from
 // the .tone-light tokens in globals.css; the look follows the printed Harmony
@@ -19,6 +21,10 @@ export function Card({ children, className = '', padded = true, tone = 'paper' }
 // The colour a quote status reads in (as in its badge), for status text.
 export function quoteStatusColor(status: QuoteStatus): string {
   return QUOTE_TONES[status].text;
+}
+
+export function invoiceStatusColor(status: InvoiceStatus): string {
+  return INVOICE_TONES[status].text;
 }
 
 // "BILL TO:"-style heading: a short orange bar over a small uppercase label.
@@ -283,4 +289,53 @@ export function CreatorInitials({ name, initials, size = 28 }: { name: string; i
 // A quiet grey tag, e.g. a quote number.
 export function Chip({ children }: { children: React.ReactNode }) {
   return <span className="inline-flex items-center whitespace-nowrap rounded-md bg-[var(--paper-sunk)] px-2 py-1 text-[12px] font-medium tabular-nums text-[var(--ink-2)]">{children}</span>;
+}
+
+// ---------------------------------------------------------------- dialog
+
+// A centred window on a dimmed page (the native <dialog>: Esc closes it and
+// focus stays inside). Clicking the dimmed area closes it unless `locked`.
+export function Dialog({ open, onClose, locked = false, labelledBy, children }: { open: boolean; onClose: () => void; locked?: boolean; labelledBy: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    if (!open && d.open) d.close();
+  }, [open]);
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby={labelledBy}
+      onClose={onClose}
+      onCancel={(e) => {
+        if (locked) e.preventDefault();
+      }}
+      onClick={(e) => {
+        if (e.target === ref.current && !locked) onClose();
+      }}
+      className="m-auto w-[calc(100%-24px)] max-w-lg bg-transparent p-0 text-[var(--ink)] backdrop:bg-black/40"
+    >
+      <div className="max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[28px] bg-[var(--tray)] p-2">{children}</div>
+    </dialog>
+  );
+}
+
+// How a payment was made: a native select (phones show their own picker).
+export function PaymentMethodSelect({ value, onChange, id }: { value: InvoicePaymentMethod; onChange: (m: InvoicePaymentMethod) => void; id?: string }) {
+  return (
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value as InvoicePaymentMethod)} className={`${inputClass} min-h-[42px]`}>
+      {INVOICE_PAYMENT_METHODS.map((m) => (
+        <option key={m} value={m}>
+          {INVOICE_PAYMENT_METHOD_LABELS[m]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// The PAID seal, as on the invoice PDF (public/icons/paid.svg).
+export function PaidStamp({ size = 64 }: { size?: number }) {
+  // eslint-disable-next-line @next/next/no-img-element -- a small fixed-size icon served from /public
+  return <img src={PAID_STAMP_SRC} width={size} height={size} alt="Paid" className="shrink-0" />;
 }

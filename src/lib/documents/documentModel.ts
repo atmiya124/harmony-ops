@@ -199,6 +199,11 @@ function chargeRows(d: {
 // Event name, date and venue. A quote for an event whose date isn't fixed
 // yet shows "TBC", as on the reference; with no event details at all the
 // block is dropped.
+// The client's purchase order number, when they gave one.
+function poRow(d: { clientPoNumber: string | null }, strong = false) {
+  return d.clientPoNumber ? [{ label: 'PO N°', value: d.clientPoNumber, strong }] : [];
+}
+
 function eventRows(d: { eventName: string | null; eventDate: string | null; venueName: string | null; venueAddress: string | null }) {
   const venue = [d.venueName, d.venueAddress].filter(Boolean).join(', ');
   if (!d.eventName && !d.eventDate && !venue) return [];
@@ -290,6 +295,7 @@ export function quoteDocument(q: QuoteDto, config: DocumentConfig, accepted: Doc
       { label: 'Quote N°', value: q.quoteNumber, strong: true },
       { label: 'Quote date', value: documentDate(q.quoteDate) },
       { label: 'Valid until', value: documentDate(q.validUntil) },
+      ...poRow(q),
     ],
     event: eventRows(q),
     banner: { label: 'Total estimate', value: money(q.totalCents) },
@@ -310,12 +316,23 @@ export function quoteDocument(q: QuoteDto, config: DocumentConfig, accepted: Doc
   };
 }
 
+// Everything received so far as one line, so the maths reads Invoice total
+// − Total paid = Balance due (the last payment alone would leave the client
+// adding up the rest). A deposit alone is labelled as such; with later
+// payments the deposit is named inside the total. Null when nothing is paid.
+export function paidRow(inv: { depositPaidCents: number; amountPaidCents: number }): { label: string; cents: number } | null {
+  const cents = inv.depositPaidCents + inv.amountPaidCents;
+  if (cents <= 0) return null;
+  if (inv.amountPaidCents === 0) return { label: 'Deposit paid', cents };
+  return { label: inv.depositPaidCents > 0 ? `Total paid (incl. ${money(inv.depositPaidCents)} deposit)` : 'Total paid', cents };
+}
+
 export function invoiceDocument(inv: InvoiceDto, config: DocumentConfig): DocumentModel {
   const itemDiscountsCents = inv.items.reduce((sum, i) => sum + i.discountCents, 0);
   const totals = chargeRows({ ...inv, itemDiscountsCents });
   totals.push({ label: 'Invoice total', value: money(inv.totalCents), tone: 'plain', strong: true });
-  if (inv.depositPaidCents > 0) totals.push({ label: 'Deposit paid', value: minus(inv.depositPaidCents), tone: 'paid' });
-  if (inv.amountPaidCents > 0) totals.push({ label: 'Amount paid', value: minus(inv.amountPaidCents), tone: 'paid' });
+  const paidLine = paidRow(inv);
+  if (paidLine) totals.push({ label: paidLine.label, value: minus(paidLine.cents), tone: 'paid' });
 
   const bank = config.payment.bank;
   const payRows: PaymentRow[] = [
@@ -352,6 +369,8 @@ export function invoiceDocument(inv: InvoiceDto, config: DocumentConfig): Docume
     metaHeading: 'Invoice details:',
     meta: [
       { label: 'Invoice N°', value: inv.invoiceNumber, strong: true },
+      // Their accounts team matches the bill to the order by this.
+      ...poRow(inv, true),
       { label: 'Invoice date', value: documentDate(inv.invoiceDate) },
       { label: 'Due date', value: documentDate(inv.dueDate), strong: true },
       ...(inv.quoteNumber ? [{ label: 'Quote ref', value: inv.quoteNumber }] : []),

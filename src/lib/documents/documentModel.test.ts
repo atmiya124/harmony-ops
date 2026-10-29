@@ -155,12 +155,23 @@ test('invoice totals: invoice total, deposit paid, balance due — all stored va
 test('invoice rows only appear when they apply', () => {
   const unpaid = invoiceDocument(invoiceFixture(quoteFixture(), { depositPaidCents: 0 }), SAMPLE_CONFIG);
   assert.equal(unpaid.totals.some((r) => r.label === 'Deposit paid'), false);
-  assert.equal(unpaid.totals.some((r) => r.label === 'Amount paid'), false);
+  assert.equal(unpaid.totals.some((r) => r.label.startsWith('Total paid')), false);
   assert.equal(unpaid.grandTotal.value, '$17,433.64');
 
+  // Deposit plus a later payment: one row with everything received so far.
   const partial = invoiceDocument(invoiceFixture(quoteFixture(), { amountPaidCents: 100000 }), SAMPLE_CONFIG);
-  assert.equal(partial.totals.find((r) => r.label === 'Amount paid')!.value, '−$1,000.00');
+  assert.deepEqual(totalsOf(partial.totals).slice(-2), ['Invoice total = $17,433.64', 'Total paid (incl. $8,716.82 deposit) = −$9,716.82']);
   assert.equal(partial.grandTotal.value, '$7,716.82');
+
+  // Paying off the rest shows the full amount paid, not the last payment.
+  const q = quoteFixture();
+  const full = invoiceDocument(invoiceFixture(q, { amountPaidCents: q.totalCents - q.depositRequiredCents }), SAMPLE_CONFIG);
+  assert.equal(full.totals.at(-1)!.value, '−$17,433.64');
+  assert.equal(full.grandTotal.value, '$0.00');
+
+  // No deposit, only payments.
+  const noDeposit = invoiceDocument(invoiceFixture(q, { depositPaidCents: 0, amountPaidCents: 50000 }), SAMPLE_CONFIG);
+  assert.equal(totalsOf(noDeposit.totals).at(-1), 'Total paid = −$500.00');
 });
 
 test('invoice payment rows: bank transfer only when every bank field is set', () => {
@@ -273,4 +284,15 @@ test('payment method: cash prints "No HST (cash payment)" and only cash; a chose
 
   // Not chosen: every method, as before.
   assert.equal(quoteDocument(quoteFixture(), SAMPLE_CONFIG).payment!.title, 'Payment method: E-Transfer, VISA, MasterCard, Bank Transfer');
+});
+
+test('the client PO number prints in the details only when there is one; on an invoice, under its number and in bold', () => {
+  const labels = (meta: { label: string }[]) => meta.map((m) => m.label);
+  assert.equal(labels(quoteDocument(quoteFixture(), SAMPLE_CONFIG).meta).includes('PO N°'), false);
+  assert.equal(labels(invoiceDocument(invoiceFixture(), SAMPLE_CONFIG).meta).includes('PO N°'), false);
+
+  const q = { ...quoteFixture(), clientPoNumber: 'PO-4471' };
+  assert.deepEqual(quoteDocument(q, SAMPLE_CONFIG).meta.at(-1), { label: 'PO N°', value: 'PO-4471', strong: false });
+  const inv = invoiceDocument(invoiceFixture(q), SAMPLE_CONFIG);
+  assert.deepEqual(inv.meta[1], { label: 'PO N°', value: 'PO-4471', strong: true });
 });

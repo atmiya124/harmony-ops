@@ -109,6 +109,24 @@ export const QUOTE_PAYMENT_METHOD_LABELS: Record<QuotePaymentMethod, string> = {
   cash: 'Cash',
 };
 
+// Money received against an invoice (Phase 5). A deposit is what the
+// client paid to book (usually recorded when the quote is converted); any
+// later payment is a `payment`.
+export const INVOICE_PAYMENT_KINDS = ['deposit', 'payment'] as const;
+export type InvoicePaymentKind = (typeof INVOICE_PAYMENT_KINDS)[number];
+export const INVOICE_PAYMENT_KIND_LABELS: Record<InvoicePaymentKind, string> = {
+  deposit: 'Deposit',
+  payment: 'Payment',
+};
+
+// How a payment was made: the same methods a quote offers (E-Transfer,
+// card, bank transfer, cash). Checked by the app, not a CHECK constraint,
+// so a method can be added later (a CHECK can't be widened on the shared
+// database). Null only for a deposit recorded before payments existed.
+export const INVOICE_PAYMENT_METHODS = QUOTE_PAYMENT_METHODS;
+export type InvoicePaymentMethod = QuotePaymentMethod;
+export const INVOICE_PAYMENT_METHOD_LABELS = QUOTE_PAYMENT_METHOD_LABELS;
+
 // The kind of client a quote is for; it picks the default Terms &
 // Conditions (see QUOTE_TERMS in defaults). Internal only — never shown to
 // the client. Stored on each quote today; a future customer profile could

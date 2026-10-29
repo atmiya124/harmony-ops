@@ -4,7 +4,7 @@ import { listInvoices } from '@/lib/db/invoiceRepo';
 import { invoiceListQuerySchema } from '@/lib/schemas/invoice';
 import { badRequest, financeErrorResponse } from '@/lib/api/financeHttp';
 
-// Read-only in Phase 1; invoices are created from accepted quotes later.
+// Invoices are created from an accepted quote: POST /api/quotes/[id]/invoice.
 export const GET = withPartner(async (req) => {
   const parsed = invoiceListQuerySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Invalid filter');

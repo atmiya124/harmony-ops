@@ -1,15 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Copy, Download, FileText, Mail, MoreHorizontal, Paperclip, Send, Trash2 } from 'lucide-react';
+import { CheckCircle2, Copy, Download, FileText, Mail, MoreHorizontal, Paperclip, ReceiptText, Send, Trash2 } from 'lucide-react';
 import { ApiError } from '@/lib/apiClient';
-import { cloneQuote, deleteQuote, sendQuote, setQuoteStatus, type QuoteDto } from '@/lib/quotesApi';
-import { formatCents } from '@/lib/money';
+import { cloneQuote, convertQuoteToInvoice, deleteQuote, sendQuote, setQuoteStatus, type QuoteDto } from '@/lib/quotesApi';
+import { centsToInput, formatCents, parseAmountToCents } from '@/lib/money';
 import { formatBp } from '@/lib/sales/inputs';
+import { torontoDate } from '@/lib/sales/format';
+import { CONTRACT_PAYMENT_DAYS, convertBlocker, defaultInvoiceDueDate } from '@/lib/sales/invoiceFromQuote';
 import { groupBySection } from '@/lib/sales/quoteDraft';
-import { canSetQuoteStatus, EMAILABLE_QUOTE_STATUSES, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS } from '@/lib/sales/types';
-import { buttonClass, ButtonLink, documentDate, iconButtonClass, Notice } from './ui';
+import { canSetQuoteStatus, EMAILABLE_QUOTE_STATUSES, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type InvoicePaymentMethod } from '@/lib/sales/types';
+import { buttonClass, ButtonLink, DateInput, Dialog, documentDate, Field, iconButtonClass, inputClass, Notice, PaymentMethodSelect } from './ui';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof ApiError || err instanceof Error ? err.message : fallback);
 
@@ -33,36 +36,6 @@ export function QuoteHeaderActions({ quote, onChange }: { quote: QuoteDto; onCha
       <MoreMenu quote={quote} onChange={onChange} />
       <SendQuoteDialog quote={quote} open={sending} onClose={() => setSending(false)} onSent={onChange} />
     </div>
-  );
-}
-
-// ---------------------------------------------------------------- dialog
-
-// A centred window on a dimmed page (the native <dialog>: Esc closes it and
-// focus stays inside). Clicking the dimmed area closes it unless `locked`.
-function Dialog({ open, onClose, locked = false, labelledBy, children }: { open: boolean; onClose: () => void; locked?: boolean; labelledBy: string; children: React.ReactNode }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-  return (
-    <dialog
-      ref={ref}
-      aria-labelledby={labelledBy}
-      onClose={onClose}
-      onCancel={(e) => {
-        if (locked) e.preventDefault();
-      }}
-      onClick={(e) => {
-        if (e.target === ref.current && !locked) onClose();
-      }}
-      className="m-auto w-[calc(100%-24px)] max-w-lg bg-transparent p-0 text-[var(--ink)] backdrop:bg-black/40"
-    >
-      <div className="max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[28px] bg-[var(--tray)] p-2">{children}</div>
-    </dialog>
   );
 }
 
@@ -296,6 +269,11 @@ function MoreMenu({ quote, onChange }: { quote: QuoteDto; onChange: (q: QuoteDto
           <a role="menuitem" href={`${pdf}?download=1`} download className={menuItemClass} onClick={() => setOpen(false)}>
             <Download size={16} /> Download PDF
           </a>
+          {quote.invoices.map((inv) => (
+            <Link key={inv.id} role="menuitem" href={`/invoices/${inv.id}`} className={menuItemClass} onClick={() => setOpen(false)}>
+              <ReceiptText size={16} /> View invoice {inv.invoiceNumber}
+            </Link>
+          ))}
           {canSetQuoteStatus(quote.status, 'sent') ? (
             <button role="menuitem" type="button" disabled={busy} onClick={markSent} className={menuItemClass}>
               <Send size={16} /> Mark as sent
@@ -327,6 +305,161 @@ function MoreMenu({ quote, onChange }: { quote: QuoteDto; onChange: (q: QuoteDto
       ) : null}
       <DeleteDialog quote={quote} open={confirmDelete} onClose={() => setConfirmDelete(false)} onChange={onChange} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- convert
+
+// Turns an accepted quote into its invoice. The items and figures are
+// copied exactly; staff choose the due date and record a deposit the
+// client has already paid, which comes off the balance due.
+export function ConvertToInvoiceDialog({ quote, open, onClose, onChange }: { quote: QuoteDto; open: boolean; onClose: () => void; onChange: (q: QuoteDto) => void }) {
+  const today = torontoDate(new Date().toISOString());
+  const [invoiceId] = useState<string>(() => crypto.randomUUID());
+  const [dueDate, setDueDate] = useState(() => defaultInvoiceDueDate(quote, today));
+  const [depositReceived, setDepositReceived] = useState(false);
+  const [depositInput, setDepositInput] = useState(() => centsToInput(quote.depositRequiredCents));
+  const [depositMethod, setDepositMethod] = useState<InvoicePaymentMethod>(() => quote.paymentMethod ?? 'etransfer');
+  const [depositOn, setDepositOn] = useState(today);
+  const [poNumber, setPoNumber] = useState(() => quote.clientPoNumber ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ id: string; invoiceNumber: string } | null>(null);
+
+  const deposit = depositReceived ? parseAmountToCents(depositInput, quote.totalCents) : ({ ok: true, cents: 0 } as const);
+  const depositCents = deposit.ok ? deposit.cents : 0;
+  const dueError = !dueDate ? 'Choose a due date' : dueDate < today ? 'Can’t be before today' : null;
+  const depositOnError = !depositReceived ? null : !depositOn ? 'Choose the date' : depositOn > today ? 'Can’t be after today' : null;
+  const blocker = convertBlocker(quote.status);
+  const dueHint = quote.clientType === 'contract' ? `Contract terms: ${CONTRACT_PAYMENT_DAYS} days` : quote.eventDate && quote.eventDate > today ? 'Regular terms: balance due on the event day' : undefined;
+
+  function close() {
+    if (busy) return;
+    setError(null);
+    onClose();
+  }
+
+  async function convert() {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await convertQuoteToInvoice(quote.id, {
+        invoiceId,
+        expectedUpdatedAt: quote.updatedAt,
+        dueDate,
+        depositPaidCents: depositCents,
+        depositMethod: depositCents > 0 ? depositMethod : null,
+        depositReceivedOn: depositCents > 0 ? depositOn : null,
+        clientPoNumber: poNumber.trim() || null,
+      });
+      const invoice = updated.invoices.find((i) => i.id === invoiceId) ?? updated.invoices.at(-1);
+      if (invoice) setCreated(invoice);
+      onChange(updated);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.current) onChange(err.current as QuoteDto);
+      setError(errorText(err, 'The invoice couldn’t be created'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={close} locked={busy} labelledBy="convert-quote-title">
+      <div className="rounded-[22px] bg-[var(--paper)] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+        {created ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center" role="status">
+            <CheckCircle2 size={36} className="text-[var(--ok)]" aria-hidden />
+            <h2 id="convert-quote-title" className="text-[19px] font-bold">
+              Invoice {created.invoiceNumber} created
+            </h2>
+            <p className="text-[14px] text-[var(--ink-2)]">
+              {quote.quoteNumber} is now marked Converted. Review the invoice, then send it to {quote.customerName}.
+            </p>
+          </div>
+        ) : (
+          <>
+            <h2 id="convert-quote-title" className="text-[19px] font-bold">
+              Convert to invoice
+            </h2>
+            <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-2)]">
+              A new invoice for <span className="font-semibold text-[var(--ink)]">{quote.customerName}</span> with the same {quote.items.length} item{quote.items.length === 1 ? '' : 's'}, pricing, notes and terms as {quote.quoteNumber}, dated today. The quote is then marked Converted and stays locked.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <Field label="Due date" error={dueError ?? undefined} hint={dueHint}>
+                <DateInput value={dueDate} onChange={setDueDate} min={today} invalid={!!dueError} />
+              </Field>
+              <Field label="Client PO # (optional)" hint="If their accounts team needs it to pay. You can add it later too.">
+                <input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} maxLength={60} autoComplete="off" className={inputClass} />
+              </Field>
+              <label className="flex items-start gap-2.5 text-[14px]">
+                <input type="checkbox" checked={depositReceived} onChange={(e) => setDepositReceived(e.target.checked)} className="mt-0.5 size-4 accent-[var(--ink)]" />
+                <span>
+                  Deposit already received
+                  {quote.depositRequiredCents > 0 ? <span className="block text-[12px] text-[var(--ink-3)]">The quote asked for {formatCents(quote.depositRequiredCents)}</span> : null}
+                </span>
+              </label>
+              {depositReceived ? (
+                <>
+                  <Field label="Deposit received" error={deposit.ok ? undefined : deposit.error}>
+                    <input inputMode="decimal" value={depositInput} onChange={(e) => setDepositInput(e.target.value)} aria-invalid={!deposit.ok || undefined} className={inputClass} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Paid by">
+                      <PaymentMethodSelect value={depositMethod} onChange={setDepositMethod} />
+                    </Field>
+                    <Field label="Received on" error={depositOnError ?? undefined}>
+                      <DateInput value={depositOn} onChange={setDepositOn} max={today} invalid={!!depositOnError} />
+                    </Field>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <dl className="mt-4 space-y-1.5 border-t border-[var(--line)] pt-3 text-[14px]">
+              <Line label="Invoice total" value={formatCents(quote.totalCents)} />
+              {depositCents > 0 ? <Line label="Deposit paid" value={`−${formatCents(depositCents)}`} tone="text-[var(--ok)]" /> : null}
+              <div className="flex items-baseline justify-between border-t border-[var(--line)] pt-2">
+                <dt className="font-semibold">Balance due</dt>
+                <dd className="text-[18px] font-bold tabular-nums">
+                  {formatCents(quote.totalCents - depositCents)} <span className="text-[12px] font-semibold text-[var(--ink-3)]">{quote.currency}</span>
+                </dd>
+              </div>
+            </dl>
+            {blocker || error ? (
+              <div className="mt-3">
+                <Notice>{blocker ?? error}</Notice>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      <div className="space-y-1 px-1 pt-3">
+        {created ? (
+          <>
+            <ButtonLink href={`/invoices/${created.id}`} className="w-full py-3.5 text-[16px]">
+              <ReceiptText size={17} /> View invoice
+            </ButtonLink>
+            <a href={`/api/invoices/${created.id}/pdf`} target="_blank" rel="noopener" className={buttonClass('secondary', 'w-full py-3 text-[15px]')}>
+              <FileText size={16} /> Preview PDF
+            </a>
+            <button type="button" onClick={close} className={buttonClass('ghost', 'w-full py-3 text-[15px]')}>
+              Done
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={convert} disabled={busy || !!blocker || !!dueError || !deposit.ok || !!depositOnError} className={buttonClass('primary', 'w-full py-3.5 text-[16px]')}>
+              <ReceiptText size={17} /> {busy ? 'Creating invoice…' : 'Create invoice'}
+            </button>
+            <button type="button" onClick={close} disabled={busy} className={buttonClass('ghost', 'w-full py-3 text-[15px]')}>
+              Cancel
+            </button>
+          </>
+        )}
+      </div>
+    </Dialog>
   );
 }
 

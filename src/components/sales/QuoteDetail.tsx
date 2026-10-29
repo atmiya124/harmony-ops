@@ -2,16 +2,17 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { CalendarDays, ChevronsUpDown, Lock, Mail, MapPin, Pencil, Phone } from 'lucide-react';
+import { ChevronsUpDown, Lock, Mail, Pencil, ReceiptText } from 'lucide-react';
 import { ApiError } from '@/lib/apiClient';
 import { setQuoteStatus, type QuoteDto } from '@/lib/quotesApi';
 import { formatCents } from '@/lib/money';
 import { formatBp } from '@/lib/sales/inputs';
 import { activityDateTime, torontoDate } from '@/lib/sales/format';
-import { groupBySection } from '@/lib/sales/quoteDraft';
 import { canSetQuoteStatus, isQuoteEditable, MANUAL_QUOTE_STATUSES, QUOTE_CLIENT_TYPE_LABELS, QUOTE_PAYMENT_METHOD_LABELS, QUOTE_STATUS_LABELS, type QuoteStatus } from '@/lib/sales/types';
 import ClientLinkCard from './ClientLinkCard';
-import { buttonClass, ButtonLink, Card, documentDate, Eyebrow, InvoiceStatusBadge, Notice, quoteStatusColor } from './ui';
+import { CustomerCard, EventCard, ItemsCard, NotesAndTermsCards, SummaryRow as Row } from './documentCards';
+import { ConvertToInvoiceDialog } from './QuoteActions';
+import { buttonClass, ButtonLink, Card, documentDate, Eyebrow, InvoiceStatusBadge, Notice, PdfActions, quoteStatusColor } from './ui';
 
 // Read-only view of a saved quote. The headline total and status first, then
 // the document in print order (items, customer and event, notes and terms);
@@ -41,7 +42,7 @@ export default function QuoteDetail({ quote, onChange }: { quote: QuoteDto; onCh
           <People quote={quote} />
         </div>
         <div className="order-4 min-w-0 lg:order-none">
-          <Items quote={quote} />
+          <ItemsCard items={quote.items} />
         </div>
         <div className="order-6 space-y-5 lg:order-none">
           <NotesAndTerms quote={quote} />
@@ -59,8 +60,14 @@ function statusLine(quote: QuoteDto): string {
   return `${QUOTE_STATUS_LABELS[quote.status]}${since}`;
 }
 
+// The invoice made from this quote (the newest, should there be several).
+function latestInvoice(quote: QuoteDto): QuoteDto['invoices'][number] | null {
+  return quote.invoices.at(-1) ?? null;
+}
+
 function Hero({ quote }: { quote: QuoteDto }) {
   const who = [quote.customerName, quote.customerCompany].filter(Boolean).join(' · ');
+  const invoice = latestInvoice(quote);
   return (
     <section className="pt-1">
       <p className="flex items-baseline gap-2">
@@ -74,6 +81,17 @@ function Hero({ quote }: { quote: QuoteDto }) {
         {who}
         {quote.eventName ? <span className="text-[var(--ink-3)]"> — {quote.eventName}</span> : null}
       </p>
+      {invoice ? (
+        <p className="mt-1 flex items-center gap-1.5 text-[13px] text-[var(--ink-3)]">
+          <ReceiptText size={13} aria-hidden />
+          <span>
+            Invoiced as{' '}
+            <Link href={`/invoices/${invoice.id}`} className="font-medium text-[var(--accent-ink)] hover:underline">
+              {invoice.invoiceNumber}
+            </Link>
+          </span>
+        </p>
+      ) : null}
       <EmailSummary quote={quote} />
     </section>
   );
@@ -124,7 +142,9 @@ function EmailSummary({ quote }: { quote: QuoteDto }) {
 // the status control under it.
 function SidePanel({ quote, onChange }: { quote: QuoteDto; onChange: (q: QuoteDto) => void }) {
   const [tab, setTab] = useState<'totals' | 'details'>('totals');
+  const [converting, setConverting] = useState(false);
   const editable = isQuoteEditable(quote.status);
+  const invoice = latestInvoice(quote);
   return (
     <div className="rounded-[28px] bg-[var(--tray)] p-2">
       <div className="rounded-[22px] bg-[var(--paper)] px-5 pb-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
@@ -150,6 +170,14 @@ function SidePanel({ quote, onChange }: { quote: QuoteDto; onChange: (q: QuoteDt
           <ButtonLink href={`/quotes/${quote.id}/edit`} className="w-full py-3.5 text-[16px]">
             <Pencil size={16} /> Edit quote
           </ButtonLink>
+        ) : quote.status === 'accepted' ? (
+          <button type="button" onClick={() => setConverting(true)} className={buttonClass('primary', 'w-full py-3.5 text-[16px]')}>
+            <ReceiptText size={16} /> Convert to invoice
+          </button>
+        ) : invoice ? (
+          <ButtonLink href={`/invoices/${invoice.id}`} className="w-full py-3.5 text-[16px]">
+            <ReceiptText size={16} /> View invoice {invoice.invoiceNumber}
+          </ButtonLink>
         ) : (
           <span className={buttonClass('ghost', 'pointer-events-none w-full bg-[var(--line-strong)] py-3.5 text-[16px]')} aria-disabled>
             <Lock size={16} /> {QUOTE_STATUS_LABELS[quote.status]} quotes are locked
@@ -157,6 +185,8 @@ function SidePanel({ quote, onChange }: { quote: QuoteDto; onChange: (q: QuoteDt
         )}
       </div>
       <StatusControl quote={quote} onChange={onChange} />
+      {/* Stays mounted once the quote turns Converted, to show the result. */}
+      <ConvertToInvoiceDialog quote={quote} open={converting} onClose={() => setConverting(false)} onChange={onChange} />
     </div>
   );
 }
@@ -194,20 +224,12 @@ function Details({ quote }: { quote: QuoteDto }) {
       <Row label="Quote №" value={quote.quoteNumber} />
       <Row label="Quote date" value={documentDate(quote.quoteDate)} />
       <Row label="Valid until" value={documentDate(quote.validUntil)} />
+      {quote.clientPoNumber ? <Row label="Client PO #" value={quote.clientPoNumber} /> : null}
       <Row label="Payment method" value={quote.paymentMethod ? QUOTE_PAYMENT_METHOD_LABELS[quote.paymentMethod] : 'Not specified'} />
       <Row label="Deposit" value={quote.depositType === 'none' ? 'None' : formatCents(quote.depositRequiredCents)} />
       <Row label="Payment on PDF" value={quote.showPaymentDetails ? 'Shown' : 'Hidden'} />
       <Row label="Created by" value={quote.createdByEmail} />
     </dl>
-  );
-}
-
-function Row({ label, value, tone = '' }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className={`flex items-baseline justify-between gap-4 ${tone}`}>
-      <dt className={tone ? '' : 'text-[var(--ink-2)]'}>{label}</dt>
-      <dd className="min-w-0 truncate text-right font-semibold tabular-nums">{value}</dd>
-    </div>
   );
 }
 
@@ -264,155 +286,45 @@ function StatusControl({ quote, onChange }: { quote: QuoteDto; onChange: (q: Quo
 
 // ---------------------------------------------------------------- main column
 
-// Grouped items, as on the printed quote.
-function Items({ quote }: { quote: QuoteDto }) {
-  const groups = groupBySection(quote.items);
-  return (
-    <Card padded={false} className="overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-4 md:px-5">
-        <h2 className="text-[15px] font-semibold">Items</h2>
-        <span className="text-[13px] text-[var(--ink-3)]">
-          {quote.items.length} item{quote.items.length === 1 ? '' : 's'}
-        </span>
-      </div>
-      <div className="hidden grid-cols-[minmax(0,1fr)_72px_110px_110px] gap-3 bg-[var(--ink)] px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-white md:grid">
-        <span>Item description</span>
-        <span className="text-center">Quantity</span>
-        <span className="text-right">Unit price</span>
-        <span className="text-right">Total</span>
-      </div>
-      {groups.map((group, g) => (
-        <div key={`${group.section}-${g}`}>
-          <div className="flex items-center gap-2 border-y border-[var(--line-strong)] bg-[#e8e9ec] px-4 py-2 md:px-5">
-            <span className="h-3.5 w-1 rounded-full bg-[var(--accent)]" aria-hidden />
-            <span className="text-[12px] font-bold uppercase tracking-[0.06em]">{group.section}</span>
-          </div>
-          <ul className="divide-y divide-[var(--line)]">
-            {group.items.map((item) => (
-              <li key={item.id} className="px-4 py-3.5 md:grid md:grid-cols-[minmax(0,1fr)_72px_110px_110px] md:items-center md:gap-3 md:px-5">
-                <div className="min-w-0">
-                  <p className="text-[14px] font-semibold uppercase tracking-[0.02em]">{item.itemName}</p>
-                  {item.description ? <p className="mt-0.5 text-[13px] text-[var(--ink-3)]">{item.description}</p> : null}
-                  {item.discountCents > 0 ? (
-                    <p className="mt-0.5 text-[12px] font-medium text-[var(--bad)]">
-                      Discount{item.discountType === 'percent' ? ` ${formatBp(item.discountValue)}` : ''} −{formatCents(item.discountCents)}
-                    </p>
-                  ) : null}
-                </div>
-                {/* Phone: one line of qty × price = total, on a faint tint so
-                    the figures stand apart from the description. */}
-                <p className="mt-2 flex items-baseline justify-between gap-3 rounded-lg bg-[var(--paper-sunk)] px-3 py-2 text-[13px] text-[var(--ink-2)] md:hidden">
-                  <span className="tabular-nums">
-                    {item.quantity} × {formatCents(item.unitPriceCents)}
-                  </span>
-                  <span className="font-semibold tabular-nums text-[var(--ink)]">
-                    {item.discountCents > 0 ? <span className="mr-1.5 font-normal text-[var(--ink-3)] line-through">{formatCents(item.lineTotalCents)}</span> : null}
-                    {formatCents(item.netTotalCents)}
-                  </span>
-                </p>
-                <span className="hidden text-center tabular-nums text-[var(--ink-2)] md:block">{item.quantity}</span>
-                <span className="hidden text-right tabular-nums text-[var(--ink-3)] md:block">{formatCents(item.unitPriceCents)}</span>
-                <span className="hidden text-right font-semibold tabular-nums md:block">
-                  {formatCents(item.netTotalCents)}
-                  {item.discountCents > 0 ? <span className="block text-[12px] font-normal text-[var(--ink-3)] line-through">{formatCents(item.lineTotalCents)}</span> : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </Card>
-  );
-}
-
 function People({ quote }: { quote: QuoteDto }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-2">
-      <Card>
-        {/* Internal: which default terms the quote started from. Staff see it
-            here only; it's not on the PDF or the client's page. */}
-        <Eyebrow aside={`${QUOTE_CLIENT_TYPE_LABELS[quote.clientType]} client`}>Customer</Eyebrow>
-        <p className="text-[15px] font-semibold">{quote.customerName}</p>
-        {quote.customerCompany ? <p className="text-[14px] text-[var(--ink-2)]">{quote.customerCompany}</p> : null}
-        <div className="mt-2 space-y-1 text-[14px] text-[var(--ink-2)]">
-          {quote.billingAddress ? <p className="whitespace-pre-line">{quote.billingAddress}</p> : null}
-          {quote.customerEmail ? (
-            <a href={`mailto:${quote.customerEmail}`} className="flex items-start gap-1.5 text-[var(--accent-ink)] hover:underline">
-              <Mail size={14} className="mt-[3px] shrink-0" /> <span className="min-w-0 break-all">{quote.customerEmail}</span>
-            </a>
-          ) : null}
-          {quote.customerPhone ? (
-            <a href={`tel:${quote.customerPhone}`} className="flex items-center gap-1.5 hover:underline">
-              <Phone size={14} /> {quote.customerPhone}
-            </a>
-          ) : null}
-          {!quote.billingAddress && !quote.customerEmail && !quote.customerPhone ? <p className="text-[var(--ink-3)]">No contact details</p> : null}
-        </div>
-      </Card>
-
-      <Card>
-        <Eyebrow
-          aside={
-            quote.event ? (
-              <Link href={`/events/bookings/${quote.event.id}`} className="font-medium text-[var(--accent-ink)] hover:underline">
-                Open booking
-              </Link>
-            ) : quote.eventDeleted ? (
-              'Booking deleted'
-            ) : null
-          }
-        >
-          Event
-        </Eyebrow>
-        <p className="text-[15px] font-semibold">{quote.eventName || 'No event name'}</p>
-        <div className="mt-2 space-y-1 text-[14px] text-[var(--ink-2)]">
-          <p className="flex items-center gap-1.5">
-            <CalendarDays size={14} /> {documentDate(quote.eventDate)}
-          </p>
-          {quote.venueName || quote.venueAddress ? (
-            <p className="flex items-start gap-1.5">
-              <MapPin size={14} className="mt-0.5 shrink-0" />
-              <span>{[quote.venueName, quote.venueAddress].filter(Boolean).join(', ')}</span>
-            </p>
-          ) : null}
-        </div>
-      </Card>
+      {/* Internal: which default terms the quote started from. Staff see it
+          here only; it's not on the PDF or the client's page. */}
+      <CustomerCard doc={quote} aside={`${QUOTE_CLIENT_TYPE_LABELS[quote.clientType]} client`} />
+      <EventCard
+        doc={quote}
+        aside={
+          quote.event ? (
+            <Link href={`/events/bookings/${quote.event.id}`} className="font-medium text-[var(--accent-ink)] hover:underline">
+              Open booking
+            </Link>
+          ) : quote.eventDeleted ? (
+            'Booking deleted'
+          ) : null
+        }
+      />
     </div>
   );
 }
 
 function NotesAndTerms({ quote }: { quote: QuoteDto }) {
-  const terms = (quote.terms ?? '').split('\n').map((t) => t.trim()).filter(Boolean);
   return (
     <>
-      {quote.notes ? (
-        <Card>
-          <Eyebrow>Notes</Eyebrow>
-          <p className="whitespace-pre-line text-[14px] leading-relaxed text-[var(--ink-2)]">{quote.notes}</p>
-        </Card>
-      ) : null}
-      <Card>
-        <Eyebrow>Terms &amp; conditions</Eyebrow>
-        {terms.length ? (
-          <ul className="divide-y divide-[var(--line)] text-[14px] text-[var(--ink-2)]">
-            {terms.map((t, i) => (
-              <li key={i} className="py-2 first:pt-0 last:pb-0">
-                {t}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[14px] text-[var(--ink-3)]">No terms on this quote.</p>
-        )}
-      </Card>
+      <NotesAndTermsCards notes={quote.notes} terms={quote.terms} emptyTerms="No terms on this quote." />
       {quote.invoices.length ? (
         <Card>
           <Eyebrow>Invoices</Eyebrow>
           <ul className="space-y-1.5 text-[14px]">
             {quote.invoices.map((inv) => (
-              <li key={inv.id} className="flex items-center justify-between">
-                <span className="font-semibold tabular-nums">{inv.invoiceNumber}</span>
-                <InvoiceStatusBadge status={inv.status} />
+              <li key={inv.id} className="flex items-center justify-between gap-3">
+                <Link href={`/invoices/${inv.id}`} className="font-semibold tabular-nums text-[var(--accent-ink)] hover:underline">
+                  {inv.invoiceNumber}
+                </Link>
+                <span className="flex items-center gap-2">
+                  <InvoiceStatusBadge status={inv.status} />
+                  <PdfActions href={`/api/invoices/${inv.id}/pdf`} compact />
+                </span>
               </li>
             ))}
           </ul>

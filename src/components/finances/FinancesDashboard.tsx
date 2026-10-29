@@ -15,6 +15,7 @@ import { useExpenseEntry } from '@/components/expenses/ExpenseEntryProvider';
 import ErrorState from '@/components/ui/ErrorState';
 import { DASHBOARD_EXPENSES_FILTER, expensesKey, FINANCE_PARTNERS_KEY, getPartners, listExpenses } from '@/lib/financeApi';
 import { useCachedData } from '@/hooks/useCachedData';
+import { INVOICES_KEY, listInvoices, listPayments, PAYMENTS_KEY } from '@/lib/quotesApi';
 import { accumulate, bucketize, comparedTo, currentPeriod, inPeriod, isMonthRange, monthsSince, previousPeriod, rangeToParam, type DateRange } from '@/lib/dateRanges';
 import { formatCents, formatCentsWhole, percentChange } from '@/lib/money';
 import { todayLocal } from '@/lib/finance/dates';
@@ -22,7 +23,8 @@ import { countsAsCost, countsAsOutlay } from '@/lib/finance/labour';
 import { EXPENSE_CATEGORIES } from '@/lib/finance/types';
 
 // The Finances tab: what the company spent over a period, where it went,
-// what each partner spent and is owed (each opens their own page). Every
+// what each partner spent and is owed (each opens their own page), and the
+// money in: invoice payments received and balances still unpaid. Every
 // card follows the range pills. Totals are money out (tax included); reimbursements are payments
 // against expenses, never extra spending, so they don't change any total.
 // Crew labour counts as cost when its hours are entered; paying the crew
@@ -40,6 +42,9 @@ export default function FinancesDashboard() {
   const partnersData = useCachedData(FINANCE_PARTNERS_KEY, getPartners, version);
   const expenses = expensesData.data ?? null;
   const partners = partnersData.data?.partners ?? [];
+  // Money in. A problem loading it leaves the expense cards working.
+  const payments = useCachedData(PAYMENTS_KEY, listPayments).data ?? null;
+  const invoices = useCachedData(INVOICES_KEY, listInvoices).data ?? null;
   const error = expensesData.error ?? partnersData.error;
 
   const view = useMemo(() => {
@@ -85,6 +90,20 @@ export default function FinancesDashboard() {
       crewUnpaidCents: rows.reduce((s, e) => s + (e.labour?.remainingCents ?? 0), 0),
     };
   }, [expenses, range, today]);
+
+  // Invoice payments in the period, and balances still owed (any period).
+  const income = useMemo(() => {
+    if (!payments || !invoices) return null;
+    const rows = payments.map((p) => ({ date: p.receivedOn, cents: p.amountCents }));
+    const period = currentPeriod(range, today);
+    const owing = invoices.filter((i) => i.status !== 'void' && i.balanceDueCents > 0);
+    return {
+      receivedCents: rows.filter((r) => inPeriod(r.date, period)).reduce((s, r) => s + r.cents, 0),
+      trend: accumulate(bucketize(rows, range, today)),
+      unpaidCents: owing.reduce((s, i) => s + i.balanceDueCents, 0),
+      unpaidCount: owing.length,
+    };
+  }, [payments, invoices, range, today]);
 
   const spentTotal = (email: string) => {
     const s = view?.spentBy.get(email);
@@ -133,6 +152,21 @@ export default function FinancesDashboard() {
             footer={rangeComparedTo ? <ChangeIndicator percent={view.change} comparedTo={rangeComparedTo} upIsGood={false} /> : null}
             aside={<ColumnTrend data={view.months} label="Expenses by month, last 12 months" height={72} caption={monthCaption} />}
           />
+
+          {/* Money in: payments recorded on invoices (tax included, as the
+              client paid), and what's still owed on invoices. */}
+          {income ? (
+            <div className="grid grid-cols-2 gap-3">
+              <ChartCard title="Payments received" value={formatCentsWhole(income.receivedCents)} href="/invoices">
+                <AreaTrend data={income.trend} color={SERIES.income} label="Invoice payments received over the period" height={56} />
+              </ChartCard>
+              <ChartCard title="Unpaid invoices" value={formatCents(income.unpaidCents)} href="/invoices">
+                <p className="mt-2 text-xs text-[var(--flat-text-faint)]">
+                  {income.unpaidCount === 0 ? 'All invoices paid' : `${income.unpaidCount} invoice${income.unpaidCount === 1 ? '' : 's'} with a balance`}
+                </p>
+              </ChartCard>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-3">
             <ChartCard title="Event expenses" value={formatCentsWhole(view.eventTotal)} href={`/finances/events?range=${rangeToParam(range)}`}>

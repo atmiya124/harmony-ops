@@ -343,6 +343,9 @@ export default function QuoteBuilder(props: Props) {
             <Field label="Valid until" error={errors.validUntil}>
               <DateInput value={draft.validUntil} min={draft.quoteDate || undefined} onChange={(v) => set('validUntil', v)} invalid={!!errors.validUntil} />
             </Field>
+            <Field label="Client PO # (optional)" error={errors.clientPoNumber} hint="Only if the client asked for one — it prints on the quote and invoice." className="col-span-2">
+              <input className={inputClass} value={draft.clientPoNumber} maxLength={60} onChange={(e) => set('clientPoNumber', e.target.value)} autoComplete="off" />
+            </Field>
           </div>
         </Card>
 

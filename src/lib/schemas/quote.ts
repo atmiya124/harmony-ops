@@ -41,6 +41,10 @@ export const quoteItemInputSchema = z.object({
 });
 export type QuoteItemInput = z.output<typeof quoteItemInputSchema>;
 
+// The client's purchase order number, for clients whose accounts team needs
+// one to pay. Optional; blank = none.
+export const clientPoNumberSchema = optionalText(60);
+
 const quoteFields = {
   customerName: requiredText(120, 'Enter the customer name'),
   customerCompany: optionalText(120),
@@ -62,6 +66,7 @@ const quoteFields = {
 
   quoteDate: calendarDate,
   validUntil: calendarDate,
+  clientPoNumber: clientPoNumberSchema,
 
   items: z.array(quoteItemInputSchema).min(1, 'Add at least one item').max(MAX_QUOTE_ITEMS, `At most ${MAX_QUOTE_ITEMS} items`),
 

@@ -18,6 +18,7 @@
 
 import type { DocumentModel, DocumentItem, DocumentTotalRow, SignedAcceptance, StatusStep } from '@/lib/documents/documentModel';
 import { HARMONY_LOGO_PNG, HARMONY_LOGO_RATIO, HARMONY_MARK_PNG, HARMONY_MARK_RATIO } from '@/lib/documents/logos.generated';
+import { PAID_STAMP_SVG } from '@/lib/documents/paidStamp';
 
 const ACCENT = '#f08a1d';
 
@@ -467,7 +468,13 @@ function StepDot({ state }: { state: StatusStep['state'] }) {
   );
 }
 
-// Read-only: what the invoice records today. Payment tracking is Phase 5.
+// The PAID seal (public/icons/paid.svg, inlined), in place of the badge once
+// the invoice is paid in full.
+function PaidStamp() {
+  return <img className="paid-stamp" src={PAID_STAMP_SVG} width="64" height="64" alt="Paid" />;
+}
+
+// What the invoice records today: the steps, and Paid / Unpaid / Void.
 export function PaymentStatus({ doc }: { doc: DocumentModel }) {
   const s = doc.paymentStatus;
   if (!s) return null;
@@ -489,7 +496,7 @@ export function PaymentStatus({ doc }: { doc: DocumentModel }) {
         </div>
         <div className="status-side">
           <div className="badge-row">
-            <span className={`badge ${s.badgeTone}`}>{s.badge}</span>
+            {s.badgeTone === 'paid' ? <PaidStamp /> : <span className={`badge ${s.badgeTone}`}>{s.badge}</span>}
             <span className="badge-note">{s.badgeNote}</span>
           </div>
           <div className="authorized">

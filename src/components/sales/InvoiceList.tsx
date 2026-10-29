@@ -1,14 +1,17 @@
 'use client';
 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Receipt } from 'lucide-react';
 import { useCachedData } from '@/hooks/useCachedData';
 import { INVOICES_KEY, listInvoices } from '@/lib/quotesApi';
 import { formatCents } from '@/lib/money';
-import { Avatar, Card, Chip, documentDate, InvoiceStatusBadge, listCardClass, listCellClass, listHeadClass, listRowClass, LoadError, PdfActions } from './ui';
+import { Avatar, Card, Chip, documentDate, InvoiceStatusBadge, listCardClass, listCellClass, listHeadClass, listRowClass, listRowHoverClass, LoadError, PdfActions } from './ui';
 
-// Invoices are read-only in Phase 1: they will be created from accepted
-// quotes (copying the items and totals) in a later phase.
+// Invoices are made from accepted quotes ("Convert to invoice" on Quote
+// Details), copying the items and totals.
 export default function InvoiceList() {
+  const router = useRouter();
   const { data: invoices, loading, error } = useCachedData(INVOICES_KEY, listInvoices);
 
   if (error && !invoices) return <LoadError message={error} />;
@@ -24,7 +27,7 @@ export default function InvoiceList() {
       <Card className="flex flex-col items-center gap-2 py-14 text-center">
         <Receipt size={28} className="text-[var(--ink-3)]" />
         <p className="text-[15px] font-semibold">No invoices yet</p>
-        <p className="max-w-sm text-[13px] text-[var(--ink-3)]">Invoices will be created from accepted quotes, carrying over their items and totals.</p>
+        <p className="max-w-sm text-[13px] text-[var(--ink-3)]">Open an accepted quote and choose Convert to invoice. Its items and totals carry over.</p>
       </Card>
     );
   }
@@ -49,12 +52,13 @@ export default function InvoiceList() {
           </thead>
           <tbody>
             {invoices.map((inv) => (
-              <tr key={inv.id} className={listRowClass}>
+              <tr key={inv.id} onClick={() => router.push(`/invoices/${inv.id}`)} className={`${listRowClass} ${listRowHoverClass}`}>
                 <td className={listCellClass}>
-                  <span className="flex min-w-0 items-center gap-2.5">
+                  {/* The real link, for keyboard users and middle-click. */}
+                  <Link href={`/invoices/${inv.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2.5 hover:underline">
                     <Avatar name={inv.customerName} />
                     <span className="truncate font-semibold">{inv.customerName}</span>
-                  </span>
+                  </Link>
                 </td>
                 <td className={listCellClass}>
                   <Chip>{inv.invoiceNumber}</Chip>
@@ -65,7 +69,7 @@ export default function InvoiceList() {
                 </td>
                 <td className={`${listCellClass} whitespace-nowrap text-right tabular-nums text-[var(--ink-2)]`}>{formatCents(inv.totalCents)}</td>
                 <td className={`${listCellClass} whitespace-nowrap text-right font-semibold tabular-nums`}>{formatCents(inv.balanceDueCents)}</td>
-                <td className={listCellClass}>
+                <td className={listCellClass} onClick={(e) => e.stopPropagation()}>
                   <div className="flex justify-end gap-1.5">
                     <PdfActions href={`/api/invoices/${inv.id}/pdf`} compact />
                   </div>
@@ -80,16 +84,18 @@ export default function InvoiceList() {
       <ul className={`${listCardClass} px-4 md:hidden`}>
         {invoices.map((inv) => (
           <li key={inv.id} className={`${listRowClass} flex items-center gap-3 py-3`}>
-            <Avatar name={inv.customerName} size={34} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-semibold">{inv.customerName}</span>
-              <span className="block truncate text-[12px] text-[var(--ink-3)]">
-                {inv.invoiceNumber} · Due {documentDate(inv.dueDate)}
+            <Link href={`/invoices/${inv.id}`} className="flex min-w-0 flex-1 items-center gap-3 active:opacity-70">
+              <Avatar name={inv.customerName} size={34} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold">{inv.customerName}</span>
+                <span className="block truncate text-[12px] text-[var(--ink-3)]">
+                  {inv.invoiceNumber} · Due {documentDate(inv.dueDate)}
+                </span>
+                <span className="mt-1 block">
+                  <InvoiceStatusBadge status={inv.status} />
+                </span>
               </span>
-              <span className="mt-1 block">
-                <InvoiceStatusBadge status={inv.status} />
-              </span>
-            </span>
+            </Link>
             <span className="flex shrink-0 flex-col items-end gap-1.5">
               <span className="text-[15px] font-semibold tabular-nums">{formatCents(inv.balanceDueCents)}</span>
               <span className="flex gap-1.5">

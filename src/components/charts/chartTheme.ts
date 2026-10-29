@@ -21,6 +21,9 @@ export const SERIES = {
   event: CATEGORICAL[1],
   reimbursement: CATEGORICAL[2],
   company: CATEGORICAL[3],
+  // Money in. Shares the green with `company`, which never appears on the
+  // same screen (company is only on SpendingCard).
+  income: CATEGORICAL[3],
 } as const;
 
 export const CHART = {

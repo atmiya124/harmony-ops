@@ -12,6 +12,7 @@ import { nextDocumentNumber } from './documentNumbers';
 import { calculateQuoteTotals } from '../quoteCalculator';
 import { QUOTE_DEFAULTS, type QuoteDefaults } from '../sales/defaults';
 import { distinctInitials } from '../sales/format';
+import { addCalendarDays } from '../sales/invoiceFromQuote';
 import { groupCustomers, type CustomerDto } from '../sales/customers';
 import { canSetQuoteStatus, isQuoteEditable, quoteDeleteBlocker, QUOTE_STATUS_LABELS, type AdjustmentType, type InvoiceStatus, type QuoteClientType, type QuoteEmailSendKind, type QuotePaymentMethod, type QuoteStatus, type SalesAuditAction, effectiveTaxRateBp } from '../sales/types';
 import type { QuoteCreateInput, QuoteStatusInput, QuoteUpdateInput } from '../schemas/quote';
@@ -66,6 +67,7 @@ export interface QuoteDto extends QuoteSummaryDto {
   eventDeleted: boolean;
   venueName: string | null;
   venueAddress: string | null;
+  clientPoNumber: string | null;
   currency: string;
   itemDiscountsCents: number; // all line discounts together (already out of the subtotal)
   subtotalCents: number;
@@ -190,6 +192,7 @@ function pricedQuote(input: QuoteCreateInput | QuoteUpdateInput) {
     venueAddress: input.venueAddress,
     quoteDate: input.quoteDate,
     validUntil: input.validUntil,
+    clientPoNumber: input.clientPoNumber,
     subtotalCents: totals.subtotalCents,
     discountType: input.discountType,
     discountValue: input.discountValue,
@@ -322,6 +325,7 @@ export async function getQuote(id: string, reader: Tx | typeof db = db): Promise
     eventDeleted: row.eventId !== null && !event,
     venueName: row.venueName,
     venueAddress: row.venueAddress,
+    clientPoNumber: row.clientPoNumber,
     currency: row.currency,
     itemDiscountsCents: items.reduce((sum, i) => sum + i.discountCents, 0),
     subtotalCents: row.subtotalCents,
@@ -464,13 +468,6 @@ export async function recordQuoteEmailSend(quoteId: string, send: { recipientEma
   });
 }
 
-// "YYYY-MM-DD" plus whole days, as a calendar date.
-function addDays(isoDate: string, days: number): string {
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 // A new draft copied from a quote: same customer, event, items, pricing,
 // notes and terms; dated `today` and valid for as many days as the original;
 // a new number. `newId` comes from the browser so a retried request returns
@@ -493,7 +490,8 @@ export async function cloneQuote(id: string, newId: string, today: string, actor
     venueName: source.venueName,
     venueAddress: source.venueAddress,
     quoteDate: today,
-    validUntil: addDays(today, validityDays),
+    validUntil: addCalendarDays(today, validityDays),
+    clientPoNumber: null, // a PO is for one order, so a copy starts without
     items: source.items.map((i) => ({
       section: i.section,
       itemName: i.itemName,

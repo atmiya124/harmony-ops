@@ -123,6 +123,7 @@ export function quoteFixture(o: QuoteFixtureOptions = {}): QuoteDto {
     eventDate: '2026-10-17',
     venueName: null,
     venueAddress: null,
+    clientPoNumber: null,
     quoteDate: '2026-10-13',
     validUntil: '2026-11-12',
     currency: 'CAD',
@@ -185,6 +186,7 @@ export function invoiceFixture(quote: QuoteDto = quoteFixture(), payments: { dep
     eventId: quote.eventId,
     venueName: quote.venueName,
     venueAddress: quote.venueAddress,
+    clientPoNumber: quote.clientPoNumber,
     currency: 'CAD',
     subtotalCents: quote.subtotalCents,
     discountType: quote.discountType,
@@ -196,6 +198,11 @@ export function invoiceFixture(quote: QuoteDto = quoteFixture(), payments: { dep
     depositPaidCents,
     amountPaidCents,
     paidAt: null,
+    statusChangedAt: '2026-10-13T16:00:00.000Z',
+    sentAt: '2026-10-13T16:00:00.000Z',
+    voidedAt: null,
+    voidReason: null,
+    createdByEmail: 'partner@example.com',
     notes: null,
     terms: [
       'Payment of the balance is due by the due date shown above. Please use the invoice number as your payment reference.',
@@ -206,6 +213,7 @@ export function invoiceFixture(quote: QuoteDto = quoteFixture(), payments: { dep
     ].join('\n'),
     showPaymentDetails: quote.showPaymentDetails,
     items: quote.items,
+    payments: [],
     ...overrides,
   };
 }

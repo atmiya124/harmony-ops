@@ -39,6 +39,7 @@ export interface QuoteDraft {
   venueAddress: string;
   quoteDate: string;
   validUntil: string;
+  clientPoNumber: string; // '' = none
   sections: SectionDraft[];
   discountType: AdjustmentType;
   discountValue: string; // percent or dollars, per type
@@ -68,6 +69,7 @@ export interface QuoteValues {
   venueAddress: string | null;
   quoteDate: string;
   validUntil: string;
+  clientPoNumber: string | null;
   items: { id?: string; section: string; itemName: string; description: string | null; quantity: number; unitPriceCents: number; discountType: AdjustmentType; discountValue: number }[];
   discountType: AdjustmentType;
   discountValue: number;
@@ -112,6 +114,7 @@ export function blankDraft(defaults: QuoteDefaults, today: string): QuoteDraft {
     venueAddress: '',
     quoteDate: today,
     validUntil: addDays(today, defaults.validityDays),
+    clientPoNumber: '',
     sections: [blankSection('LED Display')],
     discountType: defaults.discountType,
     discountValue: adjustmentToInput(defaults.discountType, defaults.discountValue),
@@ -153,6 +156,7 @@ export function draftFromQuote(q: SavedQuote): QuoteDraft {
     venueAddress: q.venueAddress ?? '',
     quoteDate: q.quoteDate,
     validUntil: q.validUntil,
+    clientPoNumber: q.clientPoNumber ?? '',
     sections: groupBySection(q.items).map((g) => ({
       key: newKey(),
       name: g.section,
@@ -316,6 +320,7 @@ export function draftToValues(d: QuoteDraft): DraftResult {
       venueAddress: orNull(d.venueAddress),
       quoteDate: d.quoteDate,
       validUntil: d.validUntil,
+      clientPoNumber: orNull(d.clientPoNumber),
       items,
       discountType: d.discountType,
       discountValue: discount.ok ? discount.value : 0,
